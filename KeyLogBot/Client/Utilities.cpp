@@ -2,18 +2,19 @@
 #include "Utilities.h"
 #include <sstream>
 #include <ctime>
+using namespace std;
 
-std::string GetCurrentTimestamp() {
+string GetCurrentTimestamp() {
     time_t now = time(0);
     struct tm tstruct;
     char buf[80];
     localtime_s(&tstruct, &now);
     strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tstruct);
-    return std::string(buf);
+    return string(buf);
 }
 
-std::string EscapeJsonString(const std::string& input) {
-    std::string output;
+string EscapeJsonString(const string& input) {
+    string output;
     for (char c : input) {
         switch (c) {
         case '"': output += "\\\""; break;
@@ -37,9 +38,9 @@ std::string EscapeJsonString(const std::string& input) {
     return output;
 }
 
-std::string CreateJsonPacket(const std::string& messageType, const std::string& payloadType, const std::string& content) {
+string CreateJsonPacket(const string& messageType, const string& payloadType, const string& content) {
     extern const char* BOT_ID;
-    std::stringstream json;
+    stringstream json;
     json << "{"
         << "\"bot_id\":\"" << BOT_ID << "\","
         << "\"timestamp\":\"" << GetCurrentTimestamp() << "\","
@@ -54,7 +55,7 @@ std::string CreateJsonPacket(const std::string& messageType, const std::string& 
 #pragma once
 #include <string>
 
-std::string GetCurrentTimestamp();
-std::string EscapeJsonString(const std::string& input);
-std::string CreateJsonPacket(const std::string& messageType, const std::string& payloadType, const std::string& content);
+string GetCurrentTimestamp();
+string EscapeJsonString(const string& input);
+string CreateJsonPacket(const string& messageType, const string& payloadType, const string& content);
 

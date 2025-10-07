@@ -1,4 +1,4 @@
 #pragma once
 
-// KeyLogger functionality will be implemented here in the future
+// them cac ham xu li keylogger vao day
 

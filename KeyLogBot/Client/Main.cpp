@@ -8,22 +8,22 @@
 using namespace std;
 
 int main() {
-    std::cout << "=== DNS Tunnel Client (manual input mode) ===" << std::endl;
-    std::cout << "Bot ID: " << BOT_ID << std::endl;
-    std::cout << "Server: " << SERVER_IP << ":" << SERVER_PORT << std::endl;
-    std::cout << "Type lines and press Enter to send. Type 'exit' to quit." << std::endl << std::endl;
+    cout << "=== DNS Tunnel Client (manual input mode) ===" << endl;
+    cout << "Bot ID: " << BOT_ID << endl;
+    cout << "Server: " << SERVER_IP << ":" << SERVER_PORT << endl;
+    cout << "Type lines and press Enter to send. Type 'exit' to quit." << endl << endl;
 
     if (!InitializeConnection()) {
-        std::cerr << "Failed to initialize connection. Exiting..." << std::endl;
+        cerr << "Failed to initialize connection. Exiting..." << endl;
         return 1;
     }
 
     SendHeartbeat();
 
-    std::string line;
+    string line;
     while (true) {
-        std::cout << "> ";
-        if (!std::getline(std::cin, line)) break;
+        cout << "> ";
+        if (!getline(cin, line)) break;
         if (line == "exit") break;
         if (line.empty()) continue;
         SendManualInput(line);
@@ -32,6 +32,6 @@ int main() {
     if (clientSocket != INVALID_SOCKET) closesocket(clientSocket);
     WSACleanup();
 
-    std::cout << "Client exiting." << std::endl;
+    cout << "Client exiting." << endl;
     return 0;
 }
