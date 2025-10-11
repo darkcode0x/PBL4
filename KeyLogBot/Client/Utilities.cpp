@@ -5,7 +5,7 @@
 using namespace std;
 
 string GetCurrentTimestamp() {
-    time_t now = time(0);
+    time_t now = time(nullptr);
     struct tm tstruct;
     char buf[80];
     localtime_s(&tstruct, &now);
