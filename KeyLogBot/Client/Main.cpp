@@ -27,7 +27,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
     cout << "Connection ID: " << connectionId << endl;
 	
     // global keyboard hook that calls processKey
-    _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, processKey, nullptr, 0);
+    _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, process_key, nullptr, 0); 
     keyboardLayout = GetKeyboardLayout(0);
 	
     MSG msg;
