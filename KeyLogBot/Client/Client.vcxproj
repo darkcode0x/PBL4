@@ -133,12 +133,10 @@
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Network.cpp" />
-    <ClCompile Include="Utilities.cpp" />
     <ClCompile Include="KeyLogger.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Network.h" />
-    <ClInclude Include="Utilities.h" />
     <ClInclude Include="KeyLogger.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

