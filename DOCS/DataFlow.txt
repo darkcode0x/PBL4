@@ -1,0 +1,44 @@
+CLIENT
+     |
+     | Query: b.0.5.48656C6C6F.example.com A
+     v
+ISP DNS RESOLVER
+     |
+     | Cache check: Biết ns1.example.com = 203.0.113.10
+     | → Bỏ qua Root/TLD lookup
+     |
+     | Gửi trực tiếp đến Authoritative Server
+     v
+ATTACKER'S SERVER (203.0.113.10:53)
+     |
+     | Parse query:
+     |   - Prefix: "b" → Data packet
+     |   - Packet#: 0
+     |   - ConnID: 5
+     |   - Data: 48656C6C6F
+     |
+     | Xử lý:
+     |   1. Kiểm tra Connection ID 5 tồn tại? ✓
+     |   2. Packet number đúng thứ tự? ✓
+     |   3. Decode hex: 48656C6C6F → "Hello"
+     |   4. Lưu vào DataParser của connection 5
+     |   5. Tăng expected_packet lên 1
+     |
+     | Response code: 200 (OK)
+     v
+Response: 200.123.123.123
+     |
+     v
+ISP DNS RESOLVER
+     |
+     └──> Forward về Client
+     |
+     v
+CLIENT
+     |
+     | Parse response:
+     |   IP[0] = 200 → OK
+     |
+     | Action:
+     |   - Tăng packet number lên 1
+     |   - Sẵn sàng gửi packet tiếp theo

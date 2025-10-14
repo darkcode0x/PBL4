@@ -1,0 +1,11 @@
+Connection Request (lần đầu):
+  - Root DNS:     50-100ms
+  - TLD DNS:      50-100ms
+  - Auth Server:  20-50ms
+  - Total:        ~120-250ms
+
+Data Requests (có cache):
+  - ISP Resolver cache ns1.example.com
+  - Bỏ qua Root/TLD
+  - Direct to Auth: 20-50ms
+  - Total:          ~20-50ms per packet
