@@ -6,6 +6,8 @@
 *.userosscache
 *.sln.docstates
 
+Capture/
+
 ## JetBrains Rider
 .idea/
 

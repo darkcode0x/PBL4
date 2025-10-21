@@ -2,9 +2,6 @@ using Server.Models;
 
 namespace Server.Utilities
 {
-    /// <summary>
-    /// Generate fake IP addresses for DNS responses
-    /// </summary>
     public static class IPGenerator
     {
         /// <summary>
@@ -45,10 +42,10 @@ namespace Server.Utilities
             return $"{first}.{second}.{third}.{fourth}";
         }
 
-        /// <summary>
+
         /// Generate fake IP for response codes
         /// Format: {code}.{random}.{random}.{random}
-        /// </summary>
+
         public static string CreateResponseIp(ResponseCode code)
         {
             int first = (int)code;

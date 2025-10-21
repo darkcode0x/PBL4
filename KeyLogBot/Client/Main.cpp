@@ -8,7 +8,6 @@
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
                    _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     
-    // Create mutex to ensure only one instance runs
     HANDLE mutex = CreateMutex(nullptr, TRUE, MUTEX_NAME);
     if (!mutex) {
         return FALSE;
@@ -25,7 +24,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         retryCount++;
         Sleep(2000);
         
-        // Prevent infinite loop
         if (retryCount > 10) {
             CloseHandle(mutex);
             return FALSE;
@@ -59,7 +57,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
     // Cleanup
     shouldStopSender = true;
     if (hSenderThread) {
-        WaitForSingleObject(hSenderThread, 5000);  // Wait max 5 seconds
+        WaitForSingleObject(hSenderThread, 5000);  
         CloseHandle(hSenderThread);
     }
     

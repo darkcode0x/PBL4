@@ -22,9 +22,7 @@ namespace Server.Models
 
         public int DataLength => _data.Count;
 
-        /// <summary>
-        /// Add data packet, checking for correct order
-        /// </summary>
+
         public void AddData(int packetNumber, byte[] data)
         {
             // Check for duplicate packet
@@ -44,9 +42,7 @@ namespace Server.Models
             LastReceivedPacket = packetNumber;
         }
 
-        /// <summary>
-        /// Get all data as string
-        /// </summary>
+
         public string GetAllData()
         {
             // Use ASCII with replacement for invalid chars (avoid box characters)

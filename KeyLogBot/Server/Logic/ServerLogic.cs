@@ -41,20 +41,16 @@ namespace Server.Logic
         public event Action<int>? OnClientCountChanged;
         public event Action<int, string>? OnDataReceived;
 
-        /// <summary>
-        /// Start DNS Server
-        /// 
+
         /// LOCAL TEST: port=53, domain=example.com, serverIp=127.0.0.1
         /// PRODUCTION: port=53, domain=yourdomain.com, serverIp=PUBLIC_IP
-        /// </summary>
         public void Start(int port, string domain, string logPath, string serverIp = "127.0.0.1")
         {
             if (_isRunning) return;
 
             _domain = domain.ToLower();
             _serverIp = serverIp;
-
-            // Initialize components
+            
             _clientManager = new ClientManager(logPath);
             _protocolHandler = new ProtocolHandler(_domain);
             _dnsHandler = new AuthoritativeDNSHandler(_domain, _serverIp);

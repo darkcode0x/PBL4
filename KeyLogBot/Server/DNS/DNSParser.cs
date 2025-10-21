@@ -28,7 +28,7 @@ namespace Server.DNS
                     queryName.Append('.');
             }
 
-            pos++; // Skip null terminator
+            pos++; 
             ushort queryType = pos + 1 < data.Length 
                 ? (ushort)((data[pos] << 8) | data[pos + 1]) 
                 : (ushort)0;

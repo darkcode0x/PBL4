@@ -1,8 +1,7 @@
 namespace Server.DNS
 {
-    /// <summary>
     /// Handle normal DNS queries for production mode
-    /// </summary>
+
     public class AuthoritativeDNSHandler
     {
         private readonly string _domain;
@@ -14,11 +13,6 @@ namespace Server.DNS
             _serverIp = serverIp;
         }
 
-        /// <summary>
-        /// Handle normal DNS queries
-        /// LOCAL TEST: Rarely used (only for manual testing)
-        /// PRODUCTION: Essential for acting as Authoritative DNS
-        /// </summary>
         public byte[] HandleQuery(byte[] originalQuery, DNSQueryInfo query, string queryName)
         {
             string stripped = queryName.TrimEnd('.');
@@ -36,16 +30,14 @@ namespace Server.DNS
                 return DNSResponseBuilder.CreateSimpleAResponse(
                     originalQuery, query, _serverIp);
             }
-
-            // Query for subdomains (e.g., email.example.com)
+            
             if (stripped.EndsWith($".{_domain}"))
             {
                 // Return A record pointing to server IP
                 return DNSResponseBuilder.CreateSimpleAResponse(
                     originalQuery, query, _serverIp);
             }
-
-            // Unknown query - return empty response
+            
             return DNSResponseBuilder.CreateEmptyResponse(originalQuery, query);
         }
     }

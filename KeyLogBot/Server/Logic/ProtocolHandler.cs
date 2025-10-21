@@ -42,11 +42,10 @@ namespace Server.Logic
             // Return subdomain part (a.1.1.1 or b.0.5.hexdata)
             return full.Substring(0, IndexOfSecondDot(stripped));
         }
-
-        /// <summary>
+        
         /// Parse data packet and add to parser
         /// Format: packetNumber.connectionId.hexData
-        /// </summary>
+
         public (int PacketNumber, int ConnectionId) ParseDataPacket(string data, ClientManager clientManager)
         {
             // Format validation
@@ -59,20 +58,17 @@ namespace Server.Logic
             int packetNumber = int.Parse(parts[0]);
             int connectionId = int.Parse(parts[1]);
             string hexData = parts[2];
-
-            // Validate connection ID
+            
             if (!clientManager.ConnectionExists(connectionId))
             {
                 throw new NXConnectionException();
             }
-
-            // Validate hex data
+            
             if (hexData.Length % 2 != 0)
             {
                 throw new DNSSyntaxException();
             }
-
-            // Decode and store data
+            
             var parser = clientManager.GetParser(connectionId);
             if (parser == null)
             {
@@ -94,10 +90,9 @@ namespace Server.Logic
 
             return (packetNumber, connectionId);
         }
-
-        /// <summary>
+        
         /// Find position of second dot from right
-        /// </summary>
+
         private int IndexOfSecondDot(string str)
         {
             int index = 0;

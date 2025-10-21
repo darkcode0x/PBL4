@@ -45,9 +45,7 @@ namespace Server.Logic
             return connectionId;
         }
 
-        /// <summary>
-        /// Get client data parser by connection ID
-        /// </summary>
+
         public DataParser? GetParser(int connectionId)
         {
             if (connectionId < 1 || connectionId > _dataParsers.Count)
@@ -55,18 +53,12 @@ namespace Server.Logic
 
             return _dataParsers[connectionId - 1];
         }
-
-        /// <summary>
-        /// Check if connection ID exists
-        /// </summary>
+        
         public bool ConnectionExists(int connectionId)
         {
             return connectionId >= 1 && connectionId <= _dataParsers.Count;
         }
-
-        /// <summary>
-        /// Save all client logs to files
-        /// </summary>
+        
         public void SaveAllLogs(Action<string> logCallback)
         {
             logCallback("\n[Shutdown] Saving all logs...");
