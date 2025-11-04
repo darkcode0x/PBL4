@@ -2,14 +2,12 @@ using System.Text;
 
 namespace Server.DNS
 {
-    /// <summary>
-    /// Parse DNS packets from raw UDP data
-    /// </summary>
+    
+    
     public class DNSParser
     {
-        /// <summary>
-        /// Parse DNS query from raw bytes
-        /// </summary>
+        
+
         public static DNSQueryInfo ParseQuery(byte[] data)
         {
             int pos = 12;
@@ -41,9 +39,7 @@ namespace Server.DNS
             };
         }
 
-        /// <summary>
-        /// Encode domain name to DNS format
-        /// </summary>
+        
         public static byte[] EncodeDomainName(string domain)
         {
             var result = new List<byte>();
@@ -57,9 +53,7 @@ namespace Server.DNS
         }
     }
 
-    /// <summary>
-    /// DNS query information
-    /// </summary>
+    
     public class DNSQueryInfo
     {
         public string QueryName { get; set; } = string.Empty;

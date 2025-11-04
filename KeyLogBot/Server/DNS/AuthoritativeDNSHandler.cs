@@ -1,6 +1,5 @@
 namespace Server.DNS
 {
-    /// Handle normal DNS queries for production mode
 
     public class AuthoritativeDNSHandler
     {
@@ -16,15 +15,13 @@ namespace Server.DNS
         public byte[] HandleQuery(byte[] originalQuery, DNSQueryInfo query, string queryName)
         {
             string stripped = queryName.TrimEnd('.');
-
-            // Query for main domain: example.com
+            
             if (stripped == _domain)
             {
                 return DNSResponseBuilder.CreateAuthoritativeResponse(
                     originalQuery, query, _serverIp, _domain);
             }
-
-            // Query for nameservers: ns1.example.com, ns2.example.com
+            
             if (stripped == $"ns1.{_domain}" || stripped == $"ns2.{_domain}")
             {
                 return DNSResponseBuilder.CreateSimpleAResponse(
@@ -33,7 +30,6 @@ namespace Server.DNS
             
             if (stripped.EndsWith($".{_domain}"))
             {
-                // Return A record pointing to server IP
                 return DNSResponseBuilder.CreateSimpleAResponse(
                     originalQuery, query, _serverIp);
             }

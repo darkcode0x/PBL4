@@ -1,8 +1,6 @@
 namespace Server.Models
 {
-    /// <summary>
-    /// Client connection information
-    /// </summary>
+
     public class ClientInfo
     {
         public int ConnectionId { get; set; }

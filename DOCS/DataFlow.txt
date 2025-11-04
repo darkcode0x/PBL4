@@ -18,8 +18,8 @@ ATTACKER'S SERVER (203.0.113.10:53)
      |   - Data: 48656C6C6F
      |
      | Xử lý:
-     |   1. Kiểm tra Connection ID 5 tồn tại? ✓
-     |   2. Packet number đúng thứ tự? ✓
+     |   1. Kiểm tra Connection ID 5 tồn tại? 
+     |   2. Packet number đúng thứ tự? 
      |   3. Decode hex: 48656C6C6F → "Hello"
      |   4. Lưu vào DataParser của connection 5
      |   5. Tăng expected_packet lên 1

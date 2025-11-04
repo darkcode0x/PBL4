@@ -2,9 +2,7 @@ using Server.Models;
 
 namespace Server.Logic
 {
-    /// <summary>
-    /// Manage client connections and data parsers
-    /// </summary>
+
     public class ClientManager
     {
         private readonly List<DataParser> _dataParsers;
@@ -21,9 +19,7 @@ namespace Server.Logic
 
         public int ClientCount => _dataParsers.Count;
 
-        /// <summary>
-        /// Add new client connection
-        /// </summary>
+
         public int AddClient(string clientIp)
         {
             _dataParsers.Add(new DataParser(clientIp));
