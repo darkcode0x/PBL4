@@ -7,7 +7,7 @@ namespace Server.Models
         DATA = 'b'    
     }
     
-
+    
     public enum ResponseCode
     {
         OK = 200,          

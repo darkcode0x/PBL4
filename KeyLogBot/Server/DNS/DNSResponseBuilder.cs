@@ -57,8 +57,7 @@ namespace Server.DNS
         }
         
         
-        public static byte[] CreateAuthoritativeResponse(byte[] originalQuery, DNSQueryInfo query, 
-            string ipAddress, string domain)
+        public static byte[] CreateAuthoritativeResponse(byte[] originalQuery, DNSQueryInfo query,  string ipAddress, string domain)
         {
             var response = new List<byte>();
 
