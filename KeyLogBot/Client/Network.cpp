@@ -185,13 +185,13 @@ cleanup:
  * Format: c.packetNum.connectionId.hexData.domain
  * Response IP first octet = status code
  */
-int sendDataTypeC(int& id, int& packetNumber, const char* domain, const char* data) {
+int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, const char* data) {
 	if (!domain || !data) {
 		return -1;
 	}
 
 	std::ostringstream fullStream;
-	fullStream << "c." << packetNumber << "." << id << "." << data << "." << domain;
+	fullStream << "c." << packetNumber << "." << offset << "." << id << "." << data << "." << domain;
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	

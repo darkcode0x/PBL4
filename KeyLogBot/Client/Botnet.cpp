@@ -49,8 +49,8 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     Sleep(10);
                 } else {
                     // Re-enqueue remaining data
-                    std::string remaining = dataToSend.substr(offset);
-                    EnqueueSend(remaining);
+                    // std::string remaining = dataToSend.substr(offset);
+                    // EnqueueSend(remaining);
                     break;
                 }
             }

