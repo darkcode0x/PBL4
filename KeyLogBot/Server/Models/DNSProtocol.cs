@@ -1,23 +1,20 @@
 namespace Server.Models
 {
-    /// DNS packet types received from client
-
+    
     public enum ReceivedPacketType
     {
-        START = 'a',  // Connection request
-        DATA = 'b'    // Data packet
+        START = 'a', 
+        DATA = 'b'    
     }
-
-
-    /// Response codes sent to client (in IP first octet)
-
+    
+    
     public enum ResponseCode
     {
-        OK = 200,          // Processed normally
-        MALFORMED = 201,   // Malformed packet
-        NX = 202,          // Connection non-existent
-        OOO = 203,         // Out of order packets
-        MAX = 204          // Max connections reached
+        OK = 200,          
+        MALFORMED = 201,  
+        NX = 202,         
+        OOO = 203,        
+        MAX = 204         
     }
     
     public class ShortCircuitException : Exception { }

