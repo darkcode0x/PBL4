@@ -327,8 +327,20 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
                     goto cleanup;
                 }
 
-                // Convert wstring to narrow string (ASCII hex)
-                std::string hexStr(txtWide.begin(), txtWide.end());
+                // TXT record packs 2 ASCII chars per wchar_t (little-endian)
+                // Extract both low and high bytes from each wchar_t
+                std::string hexStr;
+                hexStr.reserve(txtWide.length() * 2);
+                for (wchar_t wc : txtWide) {
+                    // Each wchar_t contains 2 bytes: low byte first, then high byte
+                    char lowByte = static_cast<char>(wc & 0xFF);
+                    char highByte = static_cast<char>((wc >> 8) & 0xFF);
+                    
+                    if (lowByte != 0) hexStr += lowByte;
+                    if (highByte != 0) hexStr += highByte;
+                }
+                
+                std::cout << "[DEBUG sendDataTypeP] Received hex: '" << hexStr << "' (length: " << hexStr.length() << ")" << std::endl;
                 
                 // Decode hex to bytes
                 std::string decodedChunk;
@@ -339,6 +351,9 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
                         decodedChunk += byte;
                     }
                 }
+                
+                // DEBUG: Log decoded result
+                std::cout << "[DEBUG sendDataTypeP] Decoded: '" << decodedChunk << "' (" << decodedChunk.length() << " bytes)" << std::endl;
                 
                 // Convert decoded UTF-8 bytes to wstring for g_outChunk
                 int wlen = MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, nullptr, 0);

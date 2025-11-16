@@ -285,10 +285,11 @@ namespace Server.Logic
                                     
                                     // Hex-encode the command chunk to preserve UTF-8 encoding
                                     byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
-                                    commandChunk = Convert.ToHexString(chunkBytes);
+                                    commandChunk = Convert.ToHexString(chunkBytes).ToLower();
                                     
                                     _commandChunkState[connectionId] = (state.fullCommand, state.totalChunks, offset + 1);
-                                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}' (hex: {commandChunk})");
+                                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}'");
+                                    LogMessage($"  => Hex encoded ({chunkBytes.Length} bytes): {commandChunk}");
                                 }
                                 else
                                 {

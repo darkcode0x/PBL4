@@ -13,6 +13,7 @@ namespace Server.UI
         private Label lblStatus = null!;
         private string _lastOutputHash = "";
         private string _currentDirectory = "";
+        private System.Text.StringBuilder _outputBuffer = new System.Text.StringBuilder();
 
         public RemoteShellForm(int connectionId, string clientIp, Action<int, string> sendCommandCallback)
         {
@@ -186,30 +187,62 @@ namespace Server.UI
             }
             _lastOutputHash = outputHash;
 
-            // Clean output: remove control characters except newlines
-            string cleaned = System.Text.RegularExpressions.Regex.Replace(output, @"[\x00-\x09\x0B-\x0C\x0E-\x1F]", "");
+            // Accumulate output in buffer
+            _outputBuffer.Append(output);
             
-            // Extract directory from prompt pattern: "Drive:\path>command"
-            var promptMatch = System.Text.RegularExpressions.Regex.Match(cleaned, @"([A-Za-z]:\\[^>]+)>");
-            if (promptMatch.Success)
+            // Get buffered content
+            string buffered = _outputBuffer.ToString();
+            
+            // Process if: has prompt (>) OR has substantial content (>50 chars) OR has multiple newlines
+            bool hasPrompt = buffered.Contains(">");
+            bool hasContent = buffered.Length > 50 || buffered.Split('\n').Length > 3;
+            
+            if (!hasPrompt && !hasContent)
             {
-                string newDir = promptMatch.Groups[1].Value;
-                if (newDir != _currentDirectory)
+                return; // Wait for more data
+            }
+            
+            // Process complete output block
+            string cleaned = System.Text.RegularExpressions.Regex.Replace(buffered, @"[\x00-\x09\x0B-\x0C\x0E-\x1F]", "");
+            
+            // Extract directory from prompts and display complete output
+            var promptMatches = System.Text.RegularExpressions.Regex.Matches(cleaned, @"([A-Za-z]:\\[^>]+)>");
+            
+            // Update current directory from last prompt
+            if (promptMatches.Count > 0)
+            {
+                string lastDirectory = promptMatches[promptMatches.Count - 1].Groups[1].Value;
+                if (lastDirectory != _currentDirectory)
                 {
-                    _currentDirectory = newDir;
-                    AppendToConsole($"\n[Directory: {_currentDirectory}]\n", Color.Cyan);
+                    _currentDirectory = lastDirectory;
                 }
-                // Remove prompt from output
-                cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[A-Za-z]:\\[^>]+>[^\r\n]*[\r\n]*", "");
-            }
-
-            // Only display if there's actual content after cleaning
-            if (!string.IsNullOrWhiteSpace(cleaned))
-            {
-                AppendToConsole(cleaned + "\n", Color.LightGray);
             }
             
-            AppendToConsole("cmd> ", Color.Yellow, false);
+            // Display directory header
+            if (!string.IsNullOrEmpty(_currentDirectory))
+            {
+                AppendToConsole($"cmd#{_currentDirectory}>\n", Color.Yellow, false);
+            }
+            
+            // Display the complete output (includes command echo and result)
+            // Remove all prompt prefixes to avoid duplication
+            string outputOnly = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[A-Za-z]:\\[^>]+>", "").Trim();
+            
+            if (!string.IsNullOrWhiteSpace(outputOnly))
+            {
+                AppendToConsole(outputOnly + "\n", Color.LightGray);
+            }
+            else
+            {
+                // No prompt found, just display the output
+                if (!string.IsNullOrWhiteSpace(cleaned))
+                {
+                    AppendToConsole(cleaned, Color.LightGray);
+                }
+            }
+            
+            // Clear buffer after processing
+            _outputBuffer.Clear();
             
             lblStatus.Text = $"🟢 Connected to Bot #{_connectionId} | Ready to send commands";
             lblStatus.ForeColor = Color.Lime;
