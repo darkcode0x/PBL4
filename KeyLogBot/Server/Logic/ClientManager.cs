@@ -54,6 +54,18 @@ namespace Server.Logic
         {
             return connectionId >= 1 && connectionId <= _dataParsers.Count;
         }
+
+        public int GetConnectionIdByIp(string clientIp)
+        {
+            for (int i = 0; i < _dataParsers.Count; i++)
+            {
+                if (_dataParsers[i].ClientIP == clientIp)
+                {
+                    return i + 1; // connectionId is 1-based
+                }
+            }
+            return -1; // Not found
+        }
         
         public void SaveAllLogs(Action<string> logCallback)
         {

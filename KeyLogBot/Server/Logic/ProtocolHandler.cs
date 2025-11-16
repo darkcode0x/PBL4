@@ -25,7 +25,25 @@ namespace Server.Logic
                 throw new ShortCircuitException();
             }
 
+            // Check packet type first
+            string[] initialParts = stripped.Split('.');
+            if (initialParts.Length > 0)
+            {
+                string packetType = initialParts[0];
+                
+                // Type C packets can have variable length due to hex data
+                if (packetType == "c")
+                {
+                    // For type C, extract everything before domain
+                    int domainIndex = stripped.LastIndexOf("." + _domain);
+                    if (domainIndex > 0)
+                    {
+                        return stripped.Substring(0, domainIndex);
+                    }
+                }
+            }
             
+            // For other packet types, use original logic
             int expectedDots = _domain.Count(c => c == '.') + 4;
             int actualDots = stripped.Count(c => c == '.');
 

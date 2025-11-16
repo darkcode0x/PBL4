@@ -6,6 +6,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <functional>
 #include "Shell.h"
 
 #include <sstream>
@@ -102,7 +103,10 @@ bool Shell::CreateSession() {
     _errThread = std::thread(&Shell::RedirectReadThread, this, _hChildStd_ERR_Rd, true);
 
     // notify client
-    if (_client) _client->Send(BytesToHex(std::vector<unsigned char>({'\n','>','>',' ','N','e','w',' ','S','e','s','s','i','o','n',' ','c','r','e','a','t','e','d','\n'})), false);
+    if (_client) {
+        std::vector<unsigned char> msg = {'\n','>','>',' ','N','e','w',' ','S','e','s','s','i','o','n',' ','c','r','e','a','t','e','d','\n'};
+        _client->Send(std::string(msg.begin(), msg.end()), false);
+    }
     return true;
 }
 
@@ -112,7 +116,7 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
         if (!CreateSession()) {
             if (_client) {
                 std::string err = "\n>> Failed to creation shell session\n";
-                _client->Send(BytesToHex(std::vector<unsigned char>(err.begin(), err.end())), true);
+                _client->Send(err, true);
             }
             return false;
         }
@@ -121,8 +125,7 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
     // Convert command (UTF-8) -> OEM bytes
     std::vector<unsigned char> oemBytes;
     if (!Utf8ToOemBytes(commandUtf8, oemBytes)) {
-        std::vector<unsigned char> fallback(commandUtf8.begin(), commandUtf8.end());
-        if (_client) _client->Send(BytesToHex(fallback), true);
+        if (_client) _client->Send(commandUtf8, true);
         return false;
     }
     
@@ -135,13 +138,13 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
         // attempt to recreate session once
         if (_client) {
             std::string err = "\n>> Failed to write to stdin\n";
-            _client->Send(BytesToHex(std::vector<unsigned char>(err.begin(), err.end())), true);
+            _client->Send(err, true);
         }
         return false;
     }
 
     if (_client) {
-        _client->Send(BytesToHex(oemBytes), false);
+        _client->Send(std::string(oemBytes.begin(), oemBytes.end()), false);
     }
 
     return true;
@@ -157,7 +160,7 @@ void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
         if (!IsProcessAlive()) {
             if (_client) {
                 std::string msg = "\n>> Session unexpectedly closed\n";
-                _client->Send(BytesToHex(std::vector<unsigned char>(msg.begin(), msg.end())), true);
+                _client->Send(msg, true);
             }
             // try recreate with small backoff
             std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -181,7 +184,7 @@ void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
             acc.push_back(b);
             if (b == '\n') {
                 if (_client) {
-                    _client->Send(BytesToHex(acc), isError);
+                    _client->Send(std::string(acc.begin(), acc.end()), isError);
                 }
                 acc.clear();
             }
@@ -189,7 +192,7 @@ void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
     }
 
     if (!acc.empty() && _client) {
-        _client->Send(BytesToHex(acc), isError);
+        _client->Send(std::string(acc.begin(), acc.end()), isError);
         acc.clear();
     }
 }
