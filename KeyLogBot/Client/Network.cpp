@@ -34,14 +34,18 @@ int startConnection(const char* domain) {
 	pSrvList->AddrCount = 1;
 	pSrvList->AddrArray[0] = inet_addr(DNS_SERVER_IP);
 	
-	DNS_STATUS status = DnsQuery_A(
-		pOwnerName,
-		wType,
-		DNS_OPTIONS,
-		pSrvList,
-		&pDnsRecord,
-		nullptr
-	);
+	DNS_STATUS status;
+	{
+		std::lock_guard<std::mutex> lock(g_dnsSendMutex);
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,
+			&pDnsRecord,
+			nullptr
+		);
+	}
 	
 	LocalFree(pSrvList);
 	
@@ -187,14 +191,17 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	for (int i = 0; i < 3; i++) {
 		pDnsRecord = nullptr;
 		
-		status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			pSrvList,
-			&pDnsRecord,
-			nullptr
-		);
+		{
+			std::lock_guard<std::mutex> lock(g_dnsSendMutex);
+			status = DnsQuery_A(
+				pOwnerName,
+				wType,
+				DNS_OPTIONS,
+				pSrvList,
+				&pDnsRecord,
+				nullptr
+			);
+		}
 		
 		
 		if (!status && pDnsRecord) {
@@ -262,7 +269,7 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-	WORD wType = DNS_TYPE_TXT; // 16
+	WORD wType = DNS_TYPE_TEXT; // 16
 	PDNS_RECORD pDnsRecord = nullptr;
 	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
@@ -279,22 +286,25 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 	for (int i = 0; i < 3; i++) {
 		pDnsRecord = nullptr;
 		
-		status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			pSrvList,
-			&pDnsRecord,
-			nullptr
-		);
+		{
+			std::lock_guard<std::mutex> lock(g_dnsSendMutex);
+			status = DnsQuery_A(
+				pOwnerName,
+				wType,
+				DNS_OPTIONS,
+				pSrvList,
+				&pDnsRecord,
+				nullptr
+			);
+		}
 		
 		
 		if (status == ERROR_SUCCESS && pDnsRecord) {
 
-            if (pDnsRecord->wType == DNS_TYPE_TXT &&
+            if (pDnsRecord->wType == DNS_TYPE_TEXT &&
                 pDnsRecord->Data.TXT.dwStringCount > 0)
             {
-                std::string txt = pDnsRecord->Data.TXT.pStringArray[0];
+                std::wstring txt = pDnsRecord->Data.TXT.pStringArray[0];
 
                 // --- TXT rỗng => hết chunk ---
                 if (txt.empty()) {

