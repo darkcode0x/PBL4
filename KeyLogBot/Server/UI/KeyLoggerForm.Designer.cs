@@ -1,6 +1,6 @@
 namespace Server.UI
 {
-    partial class MainForm
+    partial class KeyLoggerForm
     {
         private System.ComponentModel.IContainer components = null;
 
@@ -19,7 +19,7 @@ namespace Server.UI
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1000, 700);
-            this.Name = "MainForm";
+            this.Name = "KeyLoggerForm";
             this.Text = "DNS Tunneling Server";
             this.ResumeLayout(false);
         }

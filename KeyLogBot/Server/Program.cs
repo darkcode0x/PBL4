@@ -6,7 +6,7 @@ namespace Server
         static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.Run(new UI.MainForm());
+            Application.Run(new UI.KeyLoggerForm());
         }
     }
 }

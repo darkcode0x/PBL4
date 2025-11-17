@@ -4,7 +4,7 @@ using Server.Models;
 
 namespace Server.UI
 {
-    public partial class MainForm : Form
+    public partial class KeyLoggerForm : Form
     {
         private ServerLogic? _serverLogic;
         private bool _isRunning = false;
@@ -22,7 +22,7 @@ namespace Server.UI
         private Label lblConnections = null!;
         private RichTextBox txtKeystrokePreview = null!;
 
-        public MainForm()
+        public KeyLoggerForm()
         {
             InitializeComponent();
             InitializeCustomComponents();
