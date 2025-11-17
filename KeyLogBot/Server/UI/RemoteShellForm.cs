@@ -32,7 +32,7 @@ namespace Server.UI
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MinimumSize = new Size(600, 400);
 
-            // Top panel - Status
+            // Panel tren - Trang thai
             Panel topPanel = new Panel
             {
                 Dock = DockStyle.Top,
@@ -51,7 +51,7 @@ namespace Server.UI
 
             topPanel.Controls.Add(lblStatus);
 
-            // Console output area
+            // Vung hien thi console output
             txtConsole = new RichTextBox
             {
                 Dock = DockStyle.Fill,
@@ -64,7 +64,7 @@ namespace Server.UI
                 WordWrap = true
             };
 
-            // Bottom panel - Command input
+            // Panel duoi - Nhap lenh
             Panel bottomPanel = new Panel
             {
                 Dock = DockStyle.Bottom,
@@ -87,7 +87,7 @@ namespace Server.UI
                 Location = new Point(60, 12),
                 Width = 700,
                 BackColor = Color.FromArgb(30, 30, 30),
-                ForeColor = Color.Lime, // Changed to Lime for better visibility
+                ForeColor = Color.Lime,
                 Font = new Font("Consolas", 11),
                 BorderStyle = BorderStyle.FixedSingle,
                 TabStop = true,
@@ -97,7 +97,7 @@ namespace Server.UI
             txtCommand.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
             txtCommand.TextChanged += (s, e) => 
             {
-                // Debug output to verify text is being entered
+
                 System.Diagnostics.Debug.WriteLine($"TextBox content: '{txtCommand.Text}'");
             };
 
@@ -116,12 +116,12 @@ namespace Server.UI
 
             bottomPanel.Controls.AddRange(new Control[] { lblPrompt, txtCommand, btnSend });
 
-            // Add all to form
+
             this.Controls.Add(txtConsole);
             this.Controls.Add(bottomPanel);
             this.Controls.Add(topPanel);
 
-            // Welcome message
+
             AppendToConsole($"=== Remote Shell Session Started ===", Color.Cyan);
             AppendToConsole($"Connection ID: {_connectionId}", Color.Gray);
             AppendToConsole($"Client IP: {clientIp}", Color.Gray);
@@ -179,11 +179,11 @@ namespace Server.UI
                 return;
             }
 
-            // Check for duplicate output
+            // Kiem tra output trung lap
             string outputHash = output.GetHashCode().ToString();
             if (outputHash == _lastOutputHash && !string.IsNullOrWhiteSpace(output))
             {
-                return; // Skip duplicate
+                return; // Bo qua output trung lap
             }
             _lastOutputHash = outputHash;
 
@@ -199,7 +199,7 @@ namespace Server.UI
             
             if (!hasPrompt && !hasContent)
             {
-                return; // Wait for more data
+                return; // Cho them du lieu
             }
             
             // Process complete output block
@@ -234,7 +234,7 @@ namespace Server.UI
             }
             else
             {
-                // No prompt found, just display the output
+                // Khong tim thay prompt, chi hien thi output
                 if (!string.IsNullOrWhiteSpace(cleaned))
                 {
                     AppendToConsole(cleaned, Color.LightGray);

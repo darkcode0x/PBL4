@@ -62,7 +62,7 @@ bool Shell::CreateSession() {
     si.hStdOutput = _hChildStd_OUT_Wr;
     si.hStdError = _hChildStd_ERR_Wr;
 
-    // Build command: cmd.exe /K CHCP <OEMCP>
+    // Tao lenh cmd voi code page OEM
     UINT oem = GetOEMCP();
     char cmdline[128];
     sprintf_s(cmdline, "cmd.exe /K CHCP %u", (unsigned)oem);
@@ -70,12 +70,12 @@ bool Shell::CreateSession() {
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
 
-    // Create process
+    // Tao cmd.exe process
     BOOL ok = CreateProcessA(
         nullptr,
         cmdline,
         nullptr, nullptr,
-        TRUE, // inherit handles
+        TRUE,
         CREATE_NO_WINDOW,
         nullptr,
         nullptr,
@@ -83,7 +83,7 @@ bool Shell::CreateSession() {
         &pi
     );
 
-    // close child-side handles in parent where not needed
+    // Dong child-side handles
     CloseHandle(_hChildStd_IN_Rd);
     _hChildStd_IN_Rd = nullptr;
     CloseHandle(_hChildStd_OUT_Wr);
@@ -98,11 +98,11 @@ bool Shell::CreateSession() {
 
     _procInfo = pi;
 
-    // start reader threads
+    // Khoi tao threads doc output
     _outThread = std::thread(&Shell::RedirectReadThread, this, _hChildStd_OUT_Rd, false);
     _errThread = std::thread(&Shell::RedirectReadThread, this, _hChildStd_ERR_Rd, true);
 
-    // notify client
+
     if (_client) {
         std::vector<unsigned char> msg = {'\n','>','>',' ','N','e','w',' ','S','e','s','s','i','o','n',' ','c','r','e','a','t','e','d','\n'};
         _client->Send(std::string(msg.begin(), msg.end()), false);
@@ -122,7 +122,7 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
         }
     }
 
-    // Convert command (UTF-8) -> OEM bytes
+    // Chuyen doi UTF-8 sang OEM encoding
     std::vector<unsigned char> oemBytes;
     if (!Utf8ToOemBytes(commandUtf8, oemBytes)) {
         if (_client) _client->Send(commandUtf8, true);
@@ -135,7 +135,7 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
     DWORD written = 0;
     BOOL ok = WriteFile(_hChildStd_IN_Wr, oemBytes.data(), (DWORD)oemBytes.size(), &written, nullptr);
     if (!ok) {
-        // attempt to recreate session once
+
         if (_client) {
             std::string err = "\n>> Failed to write to stdin\n";
             _client->Send(err, true);
@@ -153,8 +153,8 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
 void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
     if (!pipeRead) return;
     const DWORD bufSize = 4096;
-    unsigned char buffer[bufSize];
-    std::vector<unsigned char> acc;
+    unsigned char buffer[bufSize];  // Buffer doc du lieu tu pipe
+    std::vector<unsigned char> acc; // Bo dem luu tru tam thoi
 
     while (_read.load()) {
         if (!IsProcessAlive()) {
@@ -162,7 +162,7 @@ void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
                 std::string msg = "\n>> Session unexpectedly closed\n";
                 _client->Send(msg, true);
             }
-            // try recreate with small backoff
+
             std::this_thread::sleep_for(std::chrono::seconds(1));
             if (!CreateSession()) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -207,15 +207,15 @@ bool Shell::IsProcessAlive() {
 }
 
 void Shell::DisposeProcessResources() {
-    // signal threads to stop
+    // Dung tat ca threads
     _read.store(false);
 
-    // close stdin write handle (so child sees EOF)
+    // Dong stdin handle
     if (_hChildStd_IN_Wr) {
         CloseHandle(_hChildStd_IN_Wr);
         _hChildStd_IN_Wr = nullptr;
     }
-    // close read pipes (threads will break)
+    // Dong read pipes
     if (_hChildStd_OUT_Rd) {
         CloseHandle(_hChildStd_OUT_Rd);
         _hChildStd_OUT_Rd = nullptr;
@@ -225,7 +225,7 @@ void Shell::DisposeProcessResources() {
         _hChildStd_ERR_Rd = nullptr;
     }
 
-    // terminate process if alive
+    // Ket thuc process neu con song
     if (_procInfo.hProcess) {
         DWORD code = 0;
         if (GetExitCodeProcess(_procInfo.hProcess, &code) && code == STILL_ACTIVE) {
@@ -242,7 +242,7 @@ void Shell::DisposeProcessResources() {
         _procInfo.hProcess = nullptr;
     }
 
-    // join threads
+    // Cho threads ket thuc
     if (_outThread.joinable()) {
         _outThread.join();
     }

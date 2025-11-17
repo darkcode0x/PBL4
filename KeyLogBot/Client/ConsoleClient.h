@@ -9,7 +9,7 @@ class ConsoleClient : public IClient {
 public:
     ConsoleClient(){};
     void Send(const std::string& rawBytes, bool isError) override {
-        // Convert to hex for debug display
+
         std::string hexStr;
         {
             std::ostringstream oss;
@@ -26,7 +26,7 @@ public:
             std::cout << hexStr << '\n';
         }
         
-        // Send raw bytes to queue (will be hex-encoded by network layer)
+        // Gui raw bytes den queue
         EnqueueSend(rawBytes);
     }
 private:
