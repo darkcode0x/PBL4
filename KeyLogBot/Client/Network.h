@@ -7,7 +7,6 @@
 #include <string>
 
 
-
 constexpr DWORD DNS_OPTIONS = DNS_QUERY_BYPASS_CACHE | DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE;
 
 

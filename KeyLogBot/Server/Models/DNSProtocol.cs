@@ -1,13 +1,6 @@
 namespace Server.Models
 {
     
-    public enum ReceivedPacketType
-    {
-        START = 'a', 
-        DATA = 'b'    
-    }
-    
-    
     public enum ResponseCode
     {
         OK = 200,          
