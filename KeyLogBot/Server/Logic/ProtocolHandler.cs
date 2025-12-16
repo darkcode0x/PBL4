@@ -49,7 +49,8 @@ namespace Server.Logic
 
             if (actualDots != expectedDots)
             {
-                throw new UnrelatedException();
+                // Should not happen - BIND9 only forwards protocol queries
+                throw new ShortCircuitException();
             }
             
             return full.Substring(0, IndexOfSecondDot(stripped));
@@ -95,6 +96,11 @@ namespace Server.Logic
             catch (DuplicatePacketException)
             {
                 throw new ShortCircuitException();
+            }
+            catch (PacketsOutOfOrderException)
+            {
+                // Re-throw to be caught by ServerLogic
+                throw;
             }
 
             return (packetNumber, connectionId);

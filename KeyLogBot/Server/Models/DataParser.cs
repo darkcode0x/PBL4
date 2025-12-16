@@ -31,7 +31,7 @@ namespace Server.Models
             if (!(packetNumber > LastReceivedPacket || packetNumber == 0))
             {
                 LastReceivedPacket = 0;
-                throw new OutOfOrderException();
+                throw new PacketsOutOfOrderException();
             }
 
             _data.AddRange(data);
@@ -54,5 +54,5 @@ namespace Server.Models
     }
 
     public class DuplicatePacketException : Exception { }
-    public class OutOfOrderException : Exception { }
+    // PacketsOutOfOrderException defined in DNSProtocol.cs to avoid duplication
 }
