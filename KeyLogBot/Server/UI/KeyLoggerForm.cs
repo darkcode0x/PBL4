@@ -346,7 +346,7 @@ namespace Server.UI
             item.SubItems.Add(client.IpAddress);
             item.SubItems.Add(client.ConnectedAt.ToString("HH:mm:ss"));
             item.SubItems.Add(client.PacketsReceived.ToString());
-            item.SubItems.Add("0");  // Initialize data size as "0" (will update dynamically)
+            item.SubItems.Add("0");  
             item.Tag = client.ConnectionId;
 
             lvClients.Items.Add(item);

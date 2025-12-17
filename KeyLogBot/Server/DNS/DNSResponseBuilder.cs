@@ -27,7 +27,7 @@ namespace Server.DNS
             response.Add(0xC0); response.Add(0x0C); 
             response.Add(0x00); response.Add(0x01); 
             response.Add(0x00); response.Add(0x01);
-            response.Add(0x00); response.Add(0x00); response.Add(0x00); response.Add(0x3C); 
+            response.Add(0x00); response.Add(0x00); response.Add(0x00); response.Add(0x00); // TTL = 0 (no cache)
             response.Add(0x00); response.Add(0x04); 
             foreach (var octet in ipAddress.Split('.'))
                 response.Add(byte.Parse(octet));
@@ -84,7 +84,7 @@ namespace Server.DNS
             response.Add(0xC0); response.Add(0x0C); // Name pointer to question
             response.Add(0x00); response.Add(0x10); // TYPE = TXT
             response.Add(0x00); response.Add(0x01); // CLASS = IN
-            response.Add(0x00); response.Add(0x00); response.Add(0x00); response.Add(0x3C); // TTL = 60 seconds
+            response.Add(0x00); response.Add(0x00); response.Add(0x00); response.Add(0x00); // TTL = 0 (no cache)
 
             // RDATA
             byte[] txtBytes = Encoding.UTF8.GetBytes(txtData);
