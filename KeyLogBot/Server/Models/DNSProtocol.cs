@@ -11,7 +11,7 @@ namespace Server.Models
     }
     
     public class ShortCircuitException : Exception { }
-    public class UnrelatedException : Exception { }
+    // UnrelatedException removed - BIND9 handles normal DNS, C&C only processes protocol packets
     public class DNSSyntaxException : Exception { }
     public class ServerMaxConnectionsException : Exception { }
     public class NXConnectionException : Exception { }

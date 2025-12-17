@@ -22,7 +22,7 @@ namespace Server.Logic
 
         public int AddClient(string clientIp)
         {
-            _dataParsers.Add(new DataParser(clientIp));
+            _dataParsers.Add(new DataParser(clientIp, _logPath));
             int connectionId = _dataParsers.Count;
 
             var clientInfo = new ClientInfo

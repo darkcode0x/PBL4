@@ -11,9 +11,10 @@ namespace Server.UI
         private RichTextBox txtConsole = null!;
         private TextBox txtCommand = null!;
         private Label lblStatus = null!;
-        private string _lastOutputHash = "";
         private string _currentDirectory = "";
         private System.Text.StringBuilder _outputBuffer = new System.Text.StringBuilder();
+        private System.Windows.Forms.Timer _flushTimer = null!;
+        private DateTime _lastFlushTime = DateTime.Now;
 
         public RemoteShellForm(int connectionId, string clientIp, Action<int, string> sendCommandCallback)
         {
@@ -22,6 +23,11 @@ namespace Server.UI
             
             InitializeComponent();
             InitializeCustomComponents(clientIp);
+            
+            _flushTimer = new System.Windows.Forms.Timer();
+            _flushTimer.Interval = 300;
+            _flushTimer.Tick += (s, e) => FlushOutputBuffer();
+            _flushTimer.Start();
         }
 
         private void InitializeCustomComponents(string clientIp)
@@ -121,13 +127,8 @@ namespace Server.UI
             this.Controls.Add(bottomPanel);
             this.Controls.Add(topPanel);
 
-
-            AppendToConsole($"=== Remote Shell Session Started ===", Color.Cyan);
-            AppendToConsole($"Connection ID: {_connectionId}", Color.Gray);
-            AppendToConsole($"Client IP: {clientIp}", Color.Gray);
-            AppendToConsole($"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", Color.Gray);
-            AppendToConsole($"===================================\n", Color.Cyan);
-            AppendToConsole("Type commands and press Enter to execute on remote client.\n", Color.Yellow);
+            AppendToConsole($"=== Remote Shell - Bot #{_connectionId} ({clientIp}) ===", Color.Cyan);
+            AppendToConsole($"Session started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", Color.Gray);
             AppendToConsole("cmd> ", Color.Yellow, false);
 
             txtCommand.Focus();
@@ -153,19 +154,18 @@ namespace Server.UI
             if (string.IsNullOrEmpty(command))
                 return;
 
-            // Display command in console
             AppendToConsole(command + "\n", Color.White);
 
-            // Send command via callback
             try
             {
                 _sendCommandCallback(_connectionId, command);
-                lblStatus.Text = $"🟡 Command sent: '{command}' - Waiting for response...";
+                lblStatus.Text = $"🟡 Executing: {command}";
                 lblStatus.ForeColor = Color.Yellow;
             }
             catch (Exception ex)
             {
-                AppendToConsole($"[Error] Failed to send command: {ex.Message}\n", Color.Red);
+                AppendToConsole($"[Error] {ex.Message}\n", Color.Red);
+                AppendToConsole("cmd> ", Color.Yellow, false);
             }
 
             txtCommand.Clear();
@@ -179,76 +179,73 @@ namespace Server.UI
                 return;
             }
 
-            // Kiem tra output trung lap
-            string outputHash = output.GetHashCode().ToString();
-            if (outputHash == _lastOutputHash && !string.IsNullOrWhiteSpace(output))
-            {
-                return; // Bo qua output trung lap
-            }
-            _lastOutputHash = outputHash;
+            if (string.IsNullOrWhiteSpace(output))
+                return;
 
-            // Accumulate output in buffer
             _outputBuffer.Append(output);
             
-            // Get buffered content
+            bool shouldFlush = false;
             string buffered = _outputBuffer.ToString();
             
-            // Process if: has prompt (>) OR has substantial content (>50 chars) OR has multiple newlines
-            bool hasPrompt = buffered.Contains(">");
-            bool hasContent = buffered.Length > 50 || buffered.Split('\n').Length > 3;
-            
-            if (!hasPrompt && !hasContent)
+            if (buffered.Contains(">"))
             {
-                return; // Cho them du lieu
+                shouldFlush = true;
+            }
+            else if (buffered.Length >= 30)
+            {
+                shouldFlush = true;
+            }
+            else if ((DateTime.Now - _lastFlushTime).TotalMilliseconds > 500)
+            {
+                shouldFlush = true;
             }
             
-            // Process complete output block
+            if (shouldFlush)
+            {
+                FlushOutputBuffer();
+            }
+        }
+        
+        private void FlushOutputBuffer()
+        {
+            if (_outputBuffer.Length == 0)
+                return;
+                
+            string buffered = _outputBuffer.ToString();
+            if (string.IsNullOrWhiteSpace(buffered))
+            {
+                _outputBuffer.Clear();
+                return;
+            }
+            
             string cleaned = System.Text.RegularExpressions.Regex.Replace(buffered, @"[\x00-\x09\x0B-\x0C\x0E-\x1F]", "");
             
-            // Extract directory from prompts and display complete output
-            var promptMatches = System.Text.RegularExpressions.Regex.Matches(cleaned, @"([A-Za-z]:\\[^>]+)>");
-            
-            // Update current directory from last prompt
-            if (promptMatches.Count > 0)
+            if (cleaned.Contains("Active code page:"))
             {
-                string lastDirectory = promptMatches[promptMatches.Count - 1].Groups[1].Value;
-                if (lastDirectory != _currentDirectory)
+                _outputBuffer.Clear();
+                return;
+            }
+            
+            if (!string.IsNullOrWhiteSpace(cleaned))
+            {
+                AppendToConsole(cleaned, Color.White);
+                
+                var promptMatches = System.Text.RegularExpressions.Regex.Matches(cleaned, @"([A-Za-z]:\\[^>]+)>");
+                if (promptMatches.Count > 0)
                 {
+                    string lastDirectory = promptMatches[promptMatches.Count - 1].Groups[1].Value;
                     _currentDirectory = lastDirectory;
+                    
+                    AppendToConsole("cmd> ", Color.Yellow, false);
+                    
+                    lblStatus.Text = $"🟢 Ready to send commands";
+                    lblStatus.ForeColor = Color.Lime;
+                    txtCommand.Focus();
                 }
             }
             
-            // Display directory header
-            if (!string.IsNullOrEmpty(_currentDirectory))
-            {
-                AppendToConsole($"cmd#{_currentDirectory}>\n", Color.Yellow, false);
-            }
-            
-            // Display the complete output (includes command echo and result)
-            // Remove all prompt prefixes to avoid duplication
-            string outputOnly = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[A-Za-z]:\\[^>]+>", "").Trim();
-            
-            if (!string.IsNullOrWhiteSpace(outputOnly))
-            {
-                AppendToConsole(outputOnly + "\n", Color.LightGray);
-            }
-            else
-            {
-                // Khong tim thay prompt, chi hien thi output
-                if (!string.IsNullOrWhiteSpace(cleaned))
-                {
-                    AppendToConsole(cleaned, Color.LightGray);
-                }
-            }
-            
-            // Clear buffer after processing
             _outputBuffer.Clear();
-            
-            lblStatus.Text = $"🟢 Connected to Bot #{_connectionId} | Ready to send commands";
-            lblStatus.ForeColor = Color.Lime;
-
-            // Focus back to input
-            txtCommand.Focus();
+            _lastFlushTime = DateTime.Now;
         }
 
         private void AppendToConsole(string text, Color color, bool newLine = true)

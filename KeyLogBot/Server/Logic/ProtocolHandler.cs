@@ -31,6 +31,18 @@ namespace Server.Logic
             {
                 string packetType = initialParts[0];
                 
+                // Type A packets: a.[IP].domain.com (e.g., a.100.123.123.123.example.com)
+                // Has 5 parts before domain instead of 4
+                if (packetType == "a")
+                {
+                    // For type A, extract: a.IP1.IP2.IP3.IP4
+                    int domainIndex = stripped.LastIndexOf("." + _domain);
+                    if (domainIndex > 0)
+                    {
+                        return stripped.Substring(0, domainIndex);
+                    }
+                }
+                
                 // Type C packets can have variable length due to hex data
                 if (packetType == "c")
                 {
@@ -43,13 +55,14 @@ namespace Server.Logic
                 }
             }
             
-            // For other packet types, use original logic
+            // For other packet types (b, p), use original logic
             int expectedDots = _domain.Count(c => c == '.') + 4;
             int actualDots = stripped.Count(c => c == '.');
 
             if (actualDots != expectedDots)
             {
-                throw new UnrelatedException();
+                // Should not happen - BIND9 only forwards protocol queries
+                throw new ShortCircuitException();
             }
             
             return full.Substring(0, IndexOfSecondDot(stripped));
@@ -95,6 +108,11 @@ namespace Server.Logic
             catch (DuplicatePacketException)
             {
                 throw new ShortCircuitException();
+            }
+            catch (PacketsOutOfOrderException)
+            {
+                // Re-throw to be caught by ServerLogic
+                throw;
             }
 
             return (packetNumber, connectionId);
