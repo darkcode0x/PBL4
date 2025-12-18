@@ -69,19 +69,18 @@ namespace Server.Logic
         
         public void SaveAllLogs(Action<string> logCallback)
         {
-            logCallback("\n[Shutdown] Saving all logs...");
+            logCallback("\n[Shutdown] Flushing remaining logs...");
             
             for (int i = 0; i < _dataParsers.Count; i++)
             {
                 var parser = _dataParsers[i];
-                if (parser.DataLength > 0)
-                {
-                    parser.SaveToFile(_logPath, i + 1);
-                    logCallback($"[Saved] Connection #{i + 1} ({parser.DataLength} bytes)");
-                }
+                
+                // Flush any remaining buffered data to keylog/shell files
+                parser.FlushLogs();
+                logCallback($"[Flushed] Connection #{i + 1}");
             }
             
-            logCallback($"[Done] Saved {_dataParsers.Count} connection(s)");
+            logCallback($"[Done] Flushed {_dataParsers.Count} connection(s)");
         }
     }
 }

