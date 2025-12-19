@@ -7,7 +7,7 @@ namespace Server.UI
     public partial class KeyLoggerForm : Form
     {
         private ServerLogic? _serverLogic;
-        private bool _isRunning = false;
+        public bool _isRunning = false;
         private Dictionary<int, RemoteShellForm> _shellForms = new();
 
 
@@ -244,7 +244,15 @@ namespace Server.UI
             }
             else
             {
-                StopServer();
+               DialogResult result = MessageBox.Show("REMOVE?", "Xác nhận", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+               if (result == DialogResult.OK)
+               {
+                   StopServer();
+               }
+               else
+               {
+                   return;
+               }
             }
         }
 
