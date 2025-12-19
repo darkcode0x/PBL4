@@ -316,18 +316,32 @@ namespace Server.UI
 
         private void StopServer()
         {
-            _serverLogic?.Stop();
-            _isRunning = false;
-
-            // Update UI
-            btnStartStop.Text = "▶ START SERVER";
-            btnStartStop.BackColor = Color.FromArgb(0, 120, 215);
-            lblStatus.Text = "⚫ Stopped";
-            lblStatus.ForeColor = Color.Gray;
-            txtDomain.Enabled = true;
-            txtPort.Enabled = true;
-            txtLogPath.Enabled = true;
-            txtServerIp.Enabled = true;
+            // Disable button to prevent double-click
+            btnStartStop.Enabled = false;
+            btnStartStop.Text = "⏳ STOPPING...";
+            lblStatus.Text = "🟡 Shutting down...";
+            lblStatus.ForeColor = Color.Orange;
+            
+            // Run stop logic on background thread to avoid blocking UI
+            Task.Run(() =>
+            {
+                _serverLogic?.Stop();
+                
+                // Update UI on main thread after stop completes
+                this.Invoke(() =>
+                {
+                    _isRunning = false;
+                    btnStartStop.Text = "▶ START SERVER";
+                    btnStartStop.BackColor = Color.FromArgb(0, 120, 215);
+                    btnStartStop.Enabled = true;
+                    lblStatus.Text = "⚫ Stopped";
+                    lblStatus.ForeColor = Color.Gray;
+                    txtDomain.Enabled = true;
+                    txtPort.Enabled = true;
+                    txtLogPath.Enabled = true;
+                    txtServerIp.Enabled = true;
+                });
+            });
         }
 
         private void LogMessage(string message)

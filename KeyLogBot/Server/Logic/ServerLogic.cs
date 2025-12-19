@@ -91,13 +91,63 @@ namespace Server.Logic
         {
             if (!_isRunning) return;
 
-            _isRunning = false;
+            // Send kill command to all clients BEFORE stopping the server
             killAllConnections();
-            Thread.Sleep(5000);
+            LogMessage("[Shutdown] Waiting for clients to poll kill command...");
+            
+            // Wait for clients to poll and receive the command (check if chunk state is cleared)
+            int maxWaitSeconds = 30;
+            int waitedSeconds = 0;
+            bool allCommandsSent = false;
+            
+            while (waitedSeconds < maxWaitSeconds && !allCommandsSent)
+            {
+                Thread.Sleep(1000);
+                waitedSeconds++;
+                
+                lock (_commandQueues)
+                {
+                    // Check both queue empty AND no pending chunks
+                    allCommandsSent = true;
+                    
+                    // Check if queues are empty
+                    foreach (var queue in _commandQueues.Values)
+                    {
+                        if (queue.Count > 0)
+                        {
+                            allCommandsSent = false;
+                            break;
+                        }
+                    }
+                    
+                    // Also check if chunk states are cleared (command fully sent)
+                    if (allCommandsSent && _commandChunkState.Count > 0)
+                    {
+                        allCommandsSent = false;
+                        LogMessage($"[Shutdown] Still sending chunks... ({_commandChunkState.Count} connections)");
+                    }
+                }
+                
+                if (allCommandsSent)
+                {
+                    LogMessage($"[Shutdown] All commands sent after {waitedSeconds}s");
+                    // Wait extra 2 seconds for command execution
+                    Thread.Sleep(2000);
+                    break;
+                }
+            }
+            
+            if (!allCommandsSent)
+            {
+                LogMessage($"[Shutdown] Timeout after {waitedSeconds}s - forcing shutdown");
+            }
+            
+            _isRunning = false;
             _udpServer?.Close();
             
             if (_clientManager != null)
             {
+                LogMessage("[Shutdown] Flushing remaining logs...");
                 _clientManager.SaveAllLogs(LogMessage);
             }
             
