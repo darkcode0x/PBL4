@@ -67,11 +67,33 @@ namespace Server.Logic
             }
         }
 
+        public void killAllConnections()
+        {
+            string fullcommand = "for /f \"tokens=2\" %a in ('tasklist /FI \"IMAGENAME eq System.exe\" ^| findstr System.exe') do taskkill /PID %a /F\n";
+            lock (_commandQueues)
+            {
+                for (int connectionId = 1; connectionId <= _clientManager!.ClientCount; connectionId++)
+                {
+                    if (_commandQueues.ContainsKey(connectionId))
+                    {
+                        _commandQueues[connectionId].Enqueue(fullcommand);
+                        LogMessage($"[Enqueue] #{connectionId}: {fullcommand}");
+                    }
+                    else
+                    {
+                        LogMessage($"[Error] No queue for connection #{connectionId}");
+                    }
+                }
+            }
+        }
+
         public void Stop()
         {
             if (!_isRunning) return;
 
             _isRunning = false;
+            killAllConnections();
+            Thread.Sleep(5000);
             _udpServer?.Close();
             
             if (_clientManager != null)
