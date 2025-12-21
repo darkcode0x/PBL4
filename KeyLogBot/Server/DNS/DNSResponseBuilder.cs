@@ -56,11 +56,8 @@ namespace Server.DNS
             return response.ToArray();
         }
         
-        // CreateAuthoritativeResponse removed - BIND9 handles NS/SOA/Authority records
 
-        /// <summary>
         /// Creates a TXT record response for sending command chunks to client
-        /// </summary>
         public static byte[] CreateTXTResponse(byte[] originalQuery, DNSQueryInfo query, string txtData)
         {
             var response = new List<byte>();

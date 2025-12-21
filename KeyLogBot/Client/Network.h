@@ -10,10 +10,10 @@
 constexpr DWORD DNS_OPTIONS = DNS_QUERY_BYPASS_CACHE | DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE;
 
 
-inline std::string TARGET_DOMAIN = "example.test";
+inline std::string TARGET_DOMAIN = "cloudflar3.com";
 
 
-inline const char* DNS_SERVER_IP = "100.111.111.100";  
+inline const char* DNS_SERVER_IP = "100.123.123.123";  
 
 inline std::wstring g_outChunk;
 inline std::mutex g_outChunkMutex;

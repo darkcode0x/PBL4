@@ -38,8 +38,6 @@ namespace Server.DNS
                 QueryType = queryType
             };
         }
-
-        // EncodeDomainName() removed - only used by CreateAuthoritativeResponse which is removed
     }
 
     

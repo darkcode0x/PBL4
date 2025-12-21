@@ -70,7 +70,7 @@ namespace Server.UI
             {
                 Location = new Point(90, 43),
                 Width = 200,
-                Text = "example.com"
+                Text = "cloudflar3.com"
             };
 
             Label lblPort = new Label { Text = "Port:", Location = new Point(310, 45), AutoSize = true };
@@ -340,6 +340,7 @@ namespace Server.UI
                     txtPort.Enabled = true;
                     txtLogPath.Enabled = true;
                     txtServerIp.Enabled = true;
+                    lvClients.Items.Clear();
                 });
             });
         }
