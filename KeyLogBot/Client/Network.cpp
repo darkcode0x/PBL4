@@ -10,10 +10,8 @@
 #include <ws2tcpip.h>
 #include <windns.h>
 #include <iphlpapi.h>
-
-#ifdef _DEBUG
 #include <iostream>
-#endif
+
 
 #pragma comment(lib, "Dnsapi.lib") 
 #pragma comment(lib, "Ws2_32.lib")

